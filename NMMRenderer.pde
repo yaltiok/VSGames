@@ -263,6 +263,18 @@ class NMMRenderer {
     } else if (game.mode == NMM_AI_MODE && game.currentPlayer == 2) {
       label = "AI Thinking...";
       c = NMM_COLOR_P2;
+    } else if (game.mode == NMM_ONLINE) {
+      String phaseLabel = "";
+      if (phase == NMM_PHASE_PLACE) phaseLabel = "Place a piece";
+      else if (phase == NMM_PHASE_MOVE) phaseLabel = (game.selectedPiece == -1) ? "Select a piece" : "Move to adjacent";
+      else phaseLabel = (game.selectedPiece == -1) ? "Select a piece" : "Fly anywhere";
+
+      if (game.currentPlayer == game.playerRole) {
+        label = "Your Turn — " + phaseLabel;
+      } else {
+        label = "Opponent's Turn";
+      }
+      c = (game.currentPlayer == 1) ? NMM_COLOR_P1 : NMM_COLOR_P2;
     } else {
       String phaseLabel = "";
       if (phase == NMM_PHASE_PLACE) phaseLabel = "Place a piece";
@@ -306,7 +318,14 @@ class NMMRenderer {
   void drawGameOverUI() {
     String msg;
     color c;
-    if (game.winner == 1) {
+    if (game.mode == NMM_ONLINE) {
+      if (game.winner == game.playerRole) {
+        msg = "You Win!";
+      } else {
+        msg = "You Lose!";
+      }
+      c = color(255);
+    } else if (game.winner == 1) {
       msg = "Player 1 Wins!";
       c = color(255);
     } else {
@@ -358,6 +377,19 @@ class NMMRenderer {
     textSize(18);
     fill(180, 160, 130);
     text("Dokuz Tas", CANVAS_W / 2, 230);
+
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(16);
+        fill(NMM_COLOR_REMOVE, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 270);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
 
     nmmDrawButton(CANVAS_W / 2, 310, "2 Players", NMM_COLOR_HIGHLIGHT);
     nmmDrawButton(CANVAS_W / 2, 375, "vs AI", color(52, 152, 219));

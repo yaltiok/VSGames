@@ -52,7 +52,7 @@ class GMKGame extends GameBase {
     disconnectMessage = "";
   }
 
-  void startGame(int gameMode) {
+  void startPlay(int gameMode) {
     mode = gameMode;
     board = new GMKBoard();
     currentPlayer = 1;
@@ -72,7 +72,7 @@ class GMKGame extends GameBase {
     if (state == GMK_LOBBY) {
       if (network.connected && !network.isHost) {
         playerRole = 2;
-        startGame(GMK_ONLINE);
+        startPlay(GMK_ONLINE);
       }
     }
 
@@ -134,9 +134,9 @@ class GMKGame extends GameBase {
     float btnW = 200, btnH = 50;
 
     if (lobbyButtonHit(cx, 310, btnW, btnH)) {
-      startGame(GMK_TWO_PLAYER);
+      startPlay(GMK_TWO_PLAYER);
     } else if (lobbyButtonHit(cx, 375, btnW, btnH)) {
-      startGame(GMK_AI_MODE);
+      startPlay(GMK_AI_MODE);
     } else if (lobbyButtonHit(cx, 440, btnW, btnH)) {
       state = GMK_LOBBY;
       lobbyState = LOBBY_CHOOSE;
@@ -230,10 +230,10 @@ class GMKGame extends GameBase {
   void handleGameOverClick() {
     float cx = CANVAS_W / 2;
     float btnW = 200, btnH = 50;
-    if (gmkButtonHit(cx, 400, btnW, btnH)) {
+    if (gmkButtonHit(cx - 110, 420, btnW, btnH)) {
       if (mode == GMK_ONLINE) network.send("REMATCH");
-      startGame(mode);
-    } else if (gmkButtonHit(cx, 470, btnW, btnH)) {
+      startPlay(mode);
+    } else if (gmkButtonHit(cx + 110, 420, btnW, btnH)) {
       if (mode == GMK_ONLINE) network.stop();
       state = GMK_MENU;
       particles.clear();
@@ -279,7 +279,7 @@ class GMKGame extends GameBase {
           } catch (Exception e) {}
         }
       } else if (data.equals("REMATCH")) {
-        startGame(GMK_ONLINE);
+        startPlay(GMK_ONLINE);
       }
       data = network.receiveNext();
     }
@@ -310,7 +310,7 @@ class GMKGame extends GameBase {
   void onServerEvent(Server s, Client c) {
     network.onServerEvent(s, c);
     playerRole = 1;
-    startGame(GMK_ONLINE);
+    startPlay(GMK_ONLINE);
   }
 
   void onDisconnectEvent(Client c) {
@@ -318,9 +318,8 @@ class GMKGame extends GameBase {
     state = GMK_MENU;
     particles.clear();
   }
-}
-
-boolean gmkButtonHit(float cx, float cy, float w, float h) {
-  return mouseX > cx - w / 2 && mouseX < cx + w / 2 &&
-         mouseY > cy - h / 2 && mouseY < cy + h / 2;
+  boolean gmkButtonHit(float cx, float cy, float w, float h) {
+    return mouseX > cx - w / 2 && mouseX < cx + w / 2 &&
+           mouseY > cy - h / 2 && mouseY < cy + h / 2;
+  }
 }

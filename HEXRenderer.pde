@@ -96,6 +96,13 @@ class HEXRenderer {
     if (game.mode == HEX_AI_MODE && game.currentPlayer == 2) {
       label = "AI Thinking...";
     }
+    if (game.mode == HEX_ONLINE) {
+      if (game.currentPlayer == game.playerRole) {
+        label = "Your Turn (" + (game.playerRole == 1 ? "Red" : "Blue") + ")";
+      } else {
+        label = "Opponent's Turn";
+      }
+    }
     fill(c);
     text(label, CANVAS_W / 2, 30);
 
@@ -110,8 +117,15 @@ class HEXRenderer {
   void drawGameOverUI() {
     String msg;
     color c;
-    if (game.winner == 1) {
-      msg = (game.mode == HEX_AI_MODE) ? "Red Wins!" : "Red Wins!";
+    if (game.mode == HEX_ONLINE) {
+      if (game.winner == game.playerRole) {
+        msg = "You Win!";
+      } else {
+        msg = "You Lose!";
+      }
+      c = (game.winner == 1) ? HEX_COLOR_P1 : HEX_COLOR_P2;
+    } else if (game.winner == 1) {
+      msg = "Red Wins!";
       c = HEX_COLOR_P1;
     } else {
       msg = (game.mode == HEX_AI_MODE) ? "AI Wins!" : "Blue Wins!";
@@ -253,6 +267,7 @@ class HEXRenderer {
   void drawHover() {
     if (game.state != HEX_PLAYING) return;
     if (game.mode == HEX_AI_MODE && game.currentPlayer == 2) return;
+    if (game.mode == HEX_ONLINE && game.currentPlayer != game.playerRole) return;
 
     int[] cell = pixelToHex(mouseX, mouseY);
     if (cell == null) return;
@@ -310,6 +325,19 @@ class HEXRenderer {
     text("Red connects Left-Right", CANVAS_W / 2, 270);
     fill(HEX_COLOR_P2);
     text("Blue connects Top-Bottom", CANVAS_W / 2, 290);
+
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(14);
+        fill(HEX_COLOR_P1, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 252);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
 
     hexDrawButton(CANVAS_W / 2, 310, "2 Players", color(46, 204, 113));
     hexDrawButton(CANVAS_W / 2, 375, "vs AI", HEX_COLOR_P2);

@@ -425,20 +425,19 @@ class DABGame extends GameBase {
     state = DAB_MENU;
     particles.clear();
   }
-}
+  boolean dabButtonHit(float x, float y, float w, float h) {
+    return mouseX > x - w / 2 && mouseX < x + w / 2 &&
+           mouseY > y - h / 2 && mouseY < y + h / 2;
+  }
 
-boolean dabButtonHit(float x, float y, float w, float h) {
-  return mouseX > x - w / 2 && mouseX < x + w / 2 &&
-         mouseY > y - h / 2 && mouseY < y + h / 2;
-}
-
-float dabPointToSegDist(float px, float py, float x1, float y1, float x2, float y2) {
-  float dx = x2 - x1;
-  float dy = y2 - y1;
-  float lenSq = dx * dx + dy * dy;
-  if (lenSq == 0) return dist(px, py, x1, y1);
-  float t = constrain(((px - x1) * dx + (py - y1) * dy) / lenSq, 0, 1);
-  float projX = x1 + t * dx;
-  float projY = y1 + t * dy;
-  return dist(px, py, projX, projY);
+  float dabPointToSegDist(float px, float py, float x1, float y1, float x2, float y2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float lenSq = dx * dx + dy * dy;
+    if (lenSq == 0) return dist(px, py, x1, y1);
+    float t = constrain(((px - x1) * dx + (py - y1) * dy) / lenSq, 0, 1);
+    float projX = x1 + t * dx;
+    float projY = y1 + t * dy;
+    return dist(px, py, projX, projY);
+  }
 }

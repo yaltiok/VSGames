@@ -4,10 +4,10 @@ class GameNetwork {
   Server server;
   Client client;
   Client remoteClient;
-  boolean isHost = false;
-  boolean connected = false;
-  boolean joining = false;
-  String joinError = "";
+  volatile boolean isHost = false;
+  volatile boolean connected = false;
+  volatile boolean joining = false;
+  volatile String joinError = "";
   String hostRoomCode = "";
 
   String getLocalIP() {

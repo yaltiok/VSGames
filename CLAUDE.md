@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 VSGames is a multi-game launcher built with [Processing](https://processing.org/) (Java-based creative coding framework). The root directory is the Processing sketch folder. A launcher menu lets the player choose a game; each game is a `GameBase` subclass.
 
-**Current games:** SuperXOX, Nine Men's Morris, Mangala, Reversi, Connect Four, Dots & Boxes, Gomoku, Checkers, Hex
+**Current games:** SuperXOX, Nine Men's Morris, Mangala, Reversi, Connect Four, Dots & Boxes, Gomoku, Checkers, Hex, Quarto, Quoridor, Battleship
 
 ## Build & Run
 
@@ -136,6 +136,39 @@ Classic 8×8 checkers with mandatory capture, multi-jump chains, and king promot
 | `HEXAI.pde` | Minimax + alpha-beta (depth 3), shortest-path evaluation |
 | `HEXRenderer.pde` | `HEXRenderer` class — hexagonal grid rendering, point-in-hex detection + colors (`HEX_COLOR_*`) |
 
+### Quarto (prefix: `QRT`)
+
+4×4 board with 16 unique pieces (4 binary attributes). Two-phase turns: place opponent's chosen piece, then choose a piece for opponent.
+
+| File | Role |
+|------|------|
+| `QRTGame.pde` | Game class + two-phase state machine (choosing/placing), constants (`QRT_MENU`, etc.) |
+| `QRTBoard.pde` | `QRTBoard` — 4×4 grid (-1=empty, 0-15=piece id), 16 pieces with 4-bit attributes, 10-line win detection |
+| `QRTAI.pde` | Minimax + alpha-beta (depth 4), separate placement/choosing evaluation, 3-in-a-row threat scoring |
+| `QRTRenderer.pde` | `QRTRenderer` class — board + piece palette + 4-attribute piece rendering + colors (`QRT_COLOR_*`) |
+
+### Quoridor (prefix: `QRD`)
+
+9×9 board with pawns and walls. Move your pawn or place a wall each turn. First to reach the opposite side wins.
+
+| File | Role |
+|------|------|
+| `QRDGame.pde` | Game class + state machine + wall mode toggle (W/R keys), constants (`QRD_MENU`, etc.) |
+| `QRDBoard.pde` | `QRDBoard` — 9×9 grid, 2 pawns, horizontal/vertical walls (8×8), BFS pathfinding, wall validation |
+| `QRDAI.pde` | Minimax + alpha-beta (depth 3), BFS-path-based candidate wall pruning, distance evaluation |
+| `QRDRenderer.pde` | `QRDRenderer` class — wood-themed board with gaps for walls, wall preview + colors (`QRD_COLOR_*`) |
+
+### Battleship (prefix: `BSH`)
+
+10×10 hidden-information naval battle. Place 5 ships, then take turns attacking opponent's grid.
+
+| File | Role |
+|------|------|
+| `BSHGame.pde` | Game class + placement/pass-screen/battle state machine, constants (`BSH_MENU`, etc.) |
+| `BSHBoard.pde` | `BSHBoard` + `BSHShip` — 10×10 own/attack grids, ship placement, attack processing, sunk detection |
+| `BSHAI.pde` | Hunt/target AI (not minimax) — checkerboard parity hunting, directional targeting after hits |
+| `BSHRenderer.pde` | `BSHRenderer` class — dual-grid display (attack+defense), placement UI, pass screen + colors (`BSH_COLOR_*`) |
+
 ### Key Conventions
 
 - **Player values**: 1 = X, 2 = O, 3 = draw, 0 = empty/ongoing
@@ -149,6 +182,9 @@ Classic 8×8 checkers with mandatory capture, multi-jump chains, and king promot
   - DAB: `MOVE:type:row:col` (type=0 horizontal, 1 vertical)
   - CHK: `MOVE:fromRow:fromCol:toRow:toCol` (each jump sent separately)
   - NMM: `PLACE:pos`, `MOVE:from:to`, `REMOVE:pos`
+  - QRT: `PLACE:row:col`, `CHOOSE:pieceId`
+  - QRD: `MOVE:row:col`, `WALL:row:col:orientation` (0=horizontal, 1=vertical)
+  - BSH: `PLACE:shipIdx:row:col:orientation`, `READY`, `ATTACK:row:col`, `RESULT:row:col:result`
   - All games: `REMATCH` for rematch
 - **AI is always player 2** (O)
 - **Canvas**: 800×900 pixels, shared across all games

@@ -56,6 +56,19 @@ class GMKRenderer {
     fill(100, 70, 40);
     text("Five in a Row", CANVAS_W / 2, 230);
 
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(16);
+        fill(GMK_COLOR_LAST, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 270);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
+
     float cx = CANVAS_W / 2;
     gmkDrawButton(cx, 310, 200, 50, "2 Players");
     gmkDrawButton(cx, 375, 200, 50, "vs AI");
@@ -152,6 +165,7 @@ class GMKRenderer {
   void drawHover() {
     if (game.state != GMK_PLAYING) return;
     if (game.aiThinking && game.mode == GMK_AI_MODE) return;
+    if (game.mode == GMK_ONLINE && game.currentPlayer != game.playerRole) return;
 
     int[] pos = getGridPos(mouseX, mouseY);
     if (pos == null) return;
@@ -178,6 +192,12 @@ class GMKRenderer {
     String status;
     if (game.aiThinking) {
       status = "AI is thinking...";
+    } else if (game.mode == GMK_ONLINE) {
+      if (game.currentPlayer == game.playerRole) {
+        status = "Your Turn (" + (game.currentPlayer == 1 ? "Black" : "White") + ")";
+      } else {
+        status = "Opponent's Turn";
+      }
     } else {
       String playerName = (game.currentPlayer == 1) ? "Black" : "White";
       status = playerName + "'s turn";
@@ -216,15 +236,22 @@ class GMKRenderer {
     textAlign(CENTER, CENTER);
     textSize(36);
     fill(255);
-    if (game.winner != 0) {
-      String winnerName = (game.winner == 1) ? "Black" : "White";
-      text(winnerName + " Wins!", CANVAS_W / 2, 340);
-    } else {
+    if (game.winner == 0) {
       text("Draw!", CANVAS_W / 2, 340);
+    } else if (game.mode == GMK_ONLINE) {
+      if (game.winner == game.playerRole) {
+        text("You Win!", CANVAS_W / 2, 340);
+      } else {
+        text("You Lose!", CANVAS_W / 2, 340);
+      }
+    } else {
+      String winnerName = (game.winner == 1) ? "Black" : "White";
+      if (game.mode == GMK_AI_MODE && game.winner == 2) winnerName = "AI";
+      text(winnerName + " Wins!", CANVAS_W / 2, 340);
     }
 
-    gmkDrawButton(CANVAS_W / 2, 400, 200, 50, "Play Again");
-    gmkDrawButton(CANVAS_W / 2, 470, 200, 50, "Menu");
+    gmkDrawButton(CANVAS_W / 2 - 110, 420, 200, 50, "Play Again");
+    gmkDrawButton(CANVAS_W / 2 + 110, 420, 200, 50, "Menu");
   }
 
   // --- How To ---
@@ -318,21 +345,20 @@ class GMKRenderer {
 
     return new int[] {row, col};
   }
-}
+  void gmkDrawButton(float cx, float cy, float w, float h, String label) {
+    boolean hover = mouseX > cx - w / 2 && mouseX < cx + w / 2 &&
+                    mouseY > cy - h / 2 && mouseY < cy + h / 2;
+    noStroke();
+    if (hover) {
+      fill(100, 70, 40, 200);
+    } else {
+      fill(80, 55, 30, 160);
+    }
+    rect(cx - w / 2, cy - h / 2, w, h, 8);
 
-void gmkDrawButton(float cx, float cy, float w, float h, String label) {
-  boolean hover = mouseX > cx - w / 2 && mouseX < cx + w / 2 &&
-                  mouseY > cy - h / 2 && mouseY < cy + h / 2;
-  noStroke();
-  if (hover) {
-    fill(100, 70, 40, 200);
-  } else {
-    fill(80, 55, 30, 160);
+    textAlign(CENTER, CENTER);
+    textSize(20);
+    fill(255);
+    text(label, cx, cy);
   }
-  rect(cx - w / 2, cy - h / 2, w, h, 8);
-
-  textAlign(CENTER, CENTER);
-  textSize(20);
-  fill(255);
-  text(label, cx, cy);
 }

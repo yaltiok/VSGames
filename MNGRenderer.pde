@@ -231,7 +231,6 @@ class MNGRenderer {
 
   void drawHover() {
     if (game.state != MNG_PLAYING) return;
-    if (game.animating) return;
     if (game.mode == MNG_AI_MODE && game.board.currentPlayer == 2) return;
     if (game.mode == MNG_ONLINE && game.board.currentPlayer != game.playerRole) return;
 
@@ -264,6 +263,13 @@ class MNGRenderer {
     if (game.winner == 3) {
       msg = "Draw!";
       c = color(180);
+    } else if (game.mode == MNG_ONLINE) {
+      if (game.winner == game.playerRole) {
+        msg = "You Win!";
+      } else {
+        msg = "You Lose!";
+      }
+      c = (game.winner == 1) ? MNG_COLOR_P1 : MNG_COLOR_P2;
     } else if (game.winner == 1) {
       msg = "Player 1 Wins!";
       c = MNG_COLOR_P1;
@@ -286,8 +292,8 @@ class MNGRenderer {
 
     float elapsed = (millis() - game.gameOverTime) / 1000.0;
     if (elapsed > 1.0) {
-      drawButton(CANVAS_W / 2 - 110, 660, "Restart", MNG_COLOR_SELECT);
-      drawButton(CANVAS_W / 2 + 110, 660, "Menu", color(120));
+      drawButton(CANVAS_W / 2 - 110, 85, "Restart", MNG_COLOR_SELECT);
+      drawButton(CANVAS_W / 2 + 110, 85, "Menu", color(120));
     }
   }
 

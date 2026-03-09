@@ -50,6 +50,13 @@ class CHKRenderer {
     if (game.mode == CHK_AI_MODE && game.currentPlayer == 2) {
       label = "AI Thinking...";
     }
+    if (game.mode == CHK_ONLINE) {
+      if (game.currentPlayer == game.playerRole) {
+        label = "Your Turn (" + (game.playerRole == 1 ? "Red" : "White") + ")";
+      } else {
+        label = "Opponent's Turn";
+      }
+    }
     if (game.inMultiJump) {
       label += " (Multi-jump!)";
     }
@@ -71,7 +78,14 @@ class CHKRenderer {
   void drawGameOverUI() {
     String msg;
     color c;
-    if (game.winner == 1) {
+    if (game.mode == CHK_ONLINE) {
+      if (game.winner == game.playerRole) {
+        msg = "You Win!";
+      } else {
+        msg = "You Lose!";
+      }
+      c = (game.winner == 1) ? CHK_COLOR_P1 : CHK_COLOR_P2;
+    } else if (game.winner == 1) {
       msg = (game.mode == CHK_AI_MODE) ? "You Win!" : "Red Wins!";
       c = CHK_COLOR_P1;
     } else {
@@ -216,6 +230,19 @@ class CHKRenderer {
     textSize(18);
     fill(150);
     text("Dama", CANVAS_W / 2, 230);
+
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(16);
+        fill(CHK_COLOR_P1, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 270);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
 
     // Buttons
     drawButton(CANVAS_W / 2, 310, "2 Players", color(46, 204, 113));

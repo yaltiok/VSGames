@@ -5,6 +5,7 @@ final int APP_INGAME = 1;
 
 final int CANVAS_W = 800;
 final int CANVAS_H = 900;
+final String VERSION = "v1.3.0";
 
 int appState = APP_LAUNCHER;
 GameBase[] games;
@@ -22,7 +23,10 @@ void setup() {
     new DABGame(),
     new GMKGame(),
     new CHKGame(),
-    new HEXGame()
+    new HEXGame(),
+    new QRTGame(),
+    new QRDGame(),
+    new BSHGame()
   };
 }
 
@@ -142,7 +146,7 @@ void drawLauncher() {
   textSize(11);
   fill(80);
   textAlign(RIGHT, BOTTOM);
-  text("v1.2.0", CANVAS_W - 12, CANVAS_H - 8);
+  text(VERSION, CANVAS_W - 12, CANVAS_H - 8);
 
   // Game buttons — grid layout
   int rows = (games.length + GRID_COLS - 1) / GRID_COLS;

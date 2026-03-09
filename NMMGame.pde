@@ -79,12 +79,6 @@ class NMMGame extends GameBase {
     switch (state) {
       case NMM_MENU:
         renderer.drawMenu();
-        if (disconnectMessage.length() > 0 && millis() - disconnectMessageTime < 3000) {
-          textAlign(CENTER, CENTER);
-          textSize(16);
-          fill(231, 76, 60);
-          text(disconnectMessage, CANVAS_W / 2, CANVAS_H - 40);
-        }
         break;
       case NMM_LOBBY:
         if (network.connected && !network.isHost) {

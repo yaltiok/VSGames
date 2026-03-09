@@ -1,9 +1,8 @@
 final int MNG_MENU = 0;
 final int MNG_PLAYING = 1;
 final int MNG_GAMEOVER = 2;
-final int MNG_ANIMATING = 3;
-final int MNG_HOWTO = 4;
-final int MNG_LOBBY = 5;
+final int MNG_HOWTO = 3;
+final int MNG_LOBBY = 4;
 
 final int MNG_TWO_PLAYER = 0;
 final int MNG_AI_MODE = 1;
@@ -18,13 +17,6 @@ class MNGGame extends GameBase {
   String extraTurnMsg;
   int extraTurnTime;
 
-  // Animation
-  ArrayList<int[]> animSequence; // pit index + stone count snapshots
-  int animCurrentStep;
-  int animTimer;
-  int animDelay;
-  int pendingMove;
-  boolean animating;
 
   // How to play
   int howToPage;
@@ -66,7 +58,6 @@ class MNGGame extends GameBase {
     aiThinking = false;
     extraTurn = false;
     extraTurnMsg = "";
-    animating = false;
     disconnectMessage = "";
   }
 
@@ -79,7 +70,6 @@ class MNGGame extends GameBase {
     extraTurn = false;
     extraTurnMsg = "";
     aiThinking = false;
-    animating = false;
     particles.clear();
   }
 
@@ -91,16 +81,11 @@ class MNGGame extends GameBase {
         renderer.drawMenu();
         break;
       case MNG_PLAYING:
-        if (mode == MNG_AI_MODE && board.currentPlayer == 2 && !aiThinking && !animating) {
+        if (mode == MNG_AI_MODE && board.currentPlayer == 2 && !aiThinking) {
           startAIMove();
         }
         if (aiThinking) updateAI();
-        if (animating) updateAnimation();
-        if (mode == MNG_ONLINE && !animating) mngReceive();
-        renderer.drawGame();
-        break;
-      case MNG_ANIMATING:
-        updateAnimation();
+        if (mode == MNG_ONLINE) mngReceive();
         renderer.drawGame();
         break;
       case MNG_GAMEOVER:
@@ -183,7 +168,6 @@ class MNGGame extends GameBase {
         returnToLauncher();
         break;
       case MNG_PLAYING:
-      case MNG_ANIMATING:
       case MNG_GAMEOVER:
         if (mode == MNG_ONLINE) network.stop();
         state = MNG_MENU;
@@ -222,7 +206,6 @@ class MNGGame extends GameBase {
   }
 
   void handlePlayClick() {
-    if (animating) return;
     if (mode == MNG_AI_MODE && board.currentPlayer == 2) return;
     if (mode == MNG_ONLINE && board.currentPlayer != playerRole) return;
 
@@ -239,11 +222,11 @@ class MNGGame extends GameBase {
     if (elapsed < 1.0) return;
 
     float bw = 200, bh = 50;
-    if (mngButtonHit(CANVAS_W / 2 - 110, 660, bw, bh)) {
+    if (mngButtonHit(CANVAS_W / 2 - 110, 85, bw, bh)) {
       if (mode == MNG_ONLINE) network.send("REMATCH");
       startPlay(mode);
     }
-    if (mngButtonHit(CANVAS_W / 2 + 110, 660, bw, bh)) {
+    if (mngButtonHit(CANVAS_W / 2 + 110, 85, bw, bh)) {
       if (mode == MNG_ONLINE) network.stop();
       state = MNG_MENU;
       particles.clear();
@@ -272,11 +255,6 @@ class MNGGame extends GameBase {
     aiThinking = false;
   }
 
-  // Animation (placeholder — instant for now)
-
-  void updateAnimation() {
-    animating = false;
-  }
 
   // Particles
 

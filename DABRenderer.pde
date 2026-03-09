@@ -86,6 +86,13 @@ class DABRenderer {
     if (game.winner == 3) {
       msg = "Draw!";
       c = color(180);
+    } else if (game.mode == DAB_ONLINE) {
+      if (game.winner == game.playerRole) {
+        msg = "You Win!";
+      } else {
+        msg = "You Lose!";
+      }
+      c = (game.winner == 1) ? DAB_COLOR_P1 : DAB_COLOR_P2;
     } else if (game.winner == 1) {
       msg = "Player 1 Wins!";
       c = DAB_COLOR_P1;
@@ -203,6 +210,7 @@ class DABRenderer {
   void drawHoverLine() {
     if (game.hoverType < 0) return;
     if (game.state != DAB_PLAYING) return;
+    if (game.mode == DAB_ONLINE && game.currentPlayer != game.playerRole) return;
 
     strokeWeight(4);
     stroke(DAB_COLOR_HOVER);
