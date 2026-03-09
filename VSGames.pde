@@ -142,6 +142,12 @@ void drawLauncher() {
   fill(150);
   text("Choose a game", CANVAS_W / 2, 210);
 
+  // Version
+  textSize(11);
+  fill(80);
+  textAlign(RIGHT, BOTTOM);
+  text("v1.1.0", CANVAS_W - 12, CANVAS_H - 8);
+
   // Game buttons — grid layout
   int rows = (games.length + GRID_COLS - 1) / GRID_COLS;
   float gridW = GRID_COLS * GRID_BTN_W + (GRID_COLS - 1) * GRID_GAP;
