@@ -1,0 +1,17 @@
+abstract class GameBase {
+  abstract String getName();
+  abstract color getColor();
+  abstract void init();
+  abstract void render();
+  abstract void onMousePressed();
+  abstract void onKeyPressed();
+
+  void onEscape() {
+    returnToLauncher();
+  }
+
+  void returnToLauncher() {
+    activeGame = null;
+    appState = APP_LAUNCHER;
+  }
+}
