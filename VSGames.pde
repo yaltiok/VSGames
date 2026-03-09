@@ -68,15 +68,11 @@ void launchGame(int index) {
 
 // Network callbacks — forwarded to active game
 void serverEvent(Server s, Client c) {
-  if (activeGame instanceof SXOGame) {
-    ((SXOGame)activeGame).onServerEvent(s, c);
-  }
+  if (activeGame != null) activeGame.onServerEvent(s, c);
 }
 
 void disconnectEvent(Client c) {
-  if (activeGame instanceof SXOGame) {
-    ((SXOGame)activeGame).onDisconnectEvent(c);
-  }
+  if (activeGame != null) activeGame.onDisconnectEvent(c);
 }
 
 // Global back button (drawn on top of every game screen)

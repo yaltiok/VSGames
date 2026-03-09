@@ -46,10 +46,24 @@ class REVRenderer {
     fill(180);
     text("Othello", CANVAS_W / 2, 230);
 
-    revDrawButton(CANVAS_W / 2, 330, "2 Players", color(46, 204, 113));
-    revDrawButton(CANVAS_W / 2, 400, "vs AI", color(52, 152, 219));
-    revDrawButton(CANVAS_W / 2, 470, "How to Play", color(0, 160, 70));
-    revDrawButton(CANVAS_W / 2, 540, "Back", color(120));
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(16);
+        fill(220, 40, 40, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 275);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
+
+    revDrawButton(CANVAS_W / 2, 310, "2 Players", color(46, 204, 113));
+    revDrawButton(CANVAS_W / 2, 375, "vs AI", color(52, 152, 219));
+    revDrawButton(CANVAS_W / 2, 440, "Online", color(0, 160, 70));
+    revDrawButton(CANVAS_W / 2, 505, "How to Play", color(241, 196, 15));
+    revDrawButton(CANVAS_W / 2, 570, "Back", color(120));
   }
 
   // Game
@@ -103,6 +117,12 @@ class REVRenderer {
       String label;
       if (game.mode == REV_AI_MODE && game.currentPlayer == 2) {
         label = "AI Thinking...";
+      } else if (game.mode == REV_ONLINE) {
+        if (game.currentPlayer == game.playerRole) {
+          label = "Your Turn (" + (game.playerRole == 1 ? "Black" : "White") + ")";
+        } else {
+          label = "Opponent's Turn";
+        }
       } else if (game.currentPlayer == 1) {
         label = "Black's Turn";
       } else {
@@ -119,6 +139,12 @@ class REVRenderer {
     String msg;
     if (game.winner == 3) {
       msg = "Draw!  " + counts[0] + " - " + counts[1];
+    } else if (game.mode == REV_ONLINE) {
+      if (game.winner == game.playerRole) {
+        msg = "You Win!  " + counts[0] + " - " + counts[1];
+      } else {
+        msg = "You Lose!  " + counts[0] + " - " + counts[1];
+      }
     } else if (game.winner == 1) {
       msg = "Black Wins!  " + counts[0] + " - " + counts[1];
     } else {
@@ -269,6 +295,7 @@ class REVRenderer {
   void drawValidMoves() {
     if (game.state != REV_PLAYING) return;
     if (game.mode == REV_AI_MODE && game.currentPlayer == 2) return;
+    if (game.mode == REV_ONLINE && game.currentPlayer != game.playerRole) return;
 
     ArrayList<int[]> moves = game.board.getValidMoves(game.currentPlayer);
     noStroke();
@@ -292,6 +319,7 @@ class REVRenderer {
   void drawHover() {
     if (game.state != REV_PLAYING) return;
     if (game.mode == REV_AI_MODE && game.currentPlayer == 2) return;
+    if (game.mode == REV_ONLINE && game.currentPlayer != game.playerRole) return;
 
     int[] cell = getCellUnderMouse();
     if (cell == null) return;
@@ -326,6 +354,11 @@ class REVRenderer {
     int row = (mouseY - REV_OFFSET_Y) / REV_CELL_SIZE;
     if (row < 0 || row > 7 || col < 0 || col > 7) return null;
     return new int[]{row, col};
+  }
+
+  void drawLobby() {
+    background(REV_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, color(0, 160, 70));
   }
 
   void drawHowTo(int page) {

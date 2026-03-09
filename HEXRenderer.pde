@@ -311,10 +311,16 @@ class HEXRenderer {
     fill(HEX_COLOR_P2);
     text("Blue connects Top-Bottom", CANVAS_W / 2, 290);
 
-    hexDrawButton(CANVAS_W / 2, 330, "2 Players", color(46, 204, 113));
-    hexDrawButton(CANVAS_W / 2, 400, "vs AI", HEX_COLOR_P2);
-    hexDrawButton(CANVAS_W / 2, 470, "How to Play", color(140, 80, 200));
-    hexDrawButton(CANVAS_W / 2, 540, "Back", color(120));
+    hexDrawButton(CANVAS_W / 2, 310, "2 Players", color(46, 204, 113));
+    hexDrawButton(CANVAS_W / 2, 375, "vs AI", HEX_COLOR_P2);
+    hexDrawButton(CANVAS_W / 2, 440, "Online", color(230, 126, 34));
+    hexDrawButton(CANVAS_W / 2, 505, "How to Play", color(140, 80, 200));
+    hexDrawButton(CANVAS_W / 2, 570, "Back", color(120));
+  }
+
+  void drawLobby() {
+    background(HEX_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, color(140, 80, 200));
   }
 
   void drawHowTo(int page) {

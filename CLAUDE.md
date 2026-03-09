@@ -24,8 +24,10 @@ All `.pde` files compile into a single Java program sharing the same scope. Proc
 | File | Role |
 |------|------|
 | `VSGames.pde` | Entry point: `setup()`, `draw()`, input dispatch, launcher menu UI |
-| `GameBase.pde` | Abstract class all games extend: `getName()`, `getColor()`, `init()`, `render()`, `onMousePressed()`, `onKeyPressed()`, `onEscape()` |
+| `GameBase.pde` | Abstract class all games extend: `getName()`, `getColor()`, `init()`, `render()`, `onMousePressed()`, `onKeyPressed()`, `onEscape()`, `onServerEvent()`, `onDisconnectEvent()` |
 | `Effects.pde` | Shared `Particle` class + generic `updateParticles()`/`drawParticles()` helpers |
+| `GameNetwork.pde` | Shared `GameNetwork` class — TCP connection, room codes, send/receive. Used by all games for LAN multiplayer |
+| `Lobby.pde` | Shared lobby UI functions: `drawLobbyUI()`, `lobbyHandleClick()`, `lobbyHandleKey()` |
 
 ### Adding a New Game
 
@@ -45,11 +47,10 @@ Ultimate Tic-Tac-Toe with local 2-player, AI, and LAN multiplayer.
 | `SXOSmallBoard.pde` | `SXOSmallBoard` — single 3×3 grid with win/draw detection |
 | `SXOAI.pde` | Minimax with alpha-beta pruning (depth 4), free functions (`sxoFindBestMove`, etc.) |
 | `SXORenderer.pde` | `SXORenderer` class — all drawing + color constants (`SXO_COLOR_*`) |
-| `SXONetwork.pde` | `SXONetwork` class — LAN multiplayer via TCP, hex room codes |
 
 ### Nine Men's Morris (prefix: `NMM`)
 
-Three-phase strategy game (place → move → fly) on a 24-node board with mill mechanics.
+Three-phase strategy game (place → move → fly) on a 24-node board with mill mechanics. Local 2-player, AI, and LAN multiplayer.
 
 | File | Role |
 |------|------|
@@ -140,7 +141,15 @@ Classic 8×8 checkers with mandatory capture, multi-jump chains, and king promot
 - **Player values**: 1 = X, 2 = O, 3 = draw, 0 = empty/ongoing
 - **Grid indexing**: Both big grid (9 sub-boards) and small grids (9 cells) use 0-8 index, row-major order
 - **Active grid rule**: After a move in cell N, opponent must play in sub-board N (unless won/drawn → free choice, `activeGrid = -1`)
-- **Network protocol**: Newline-delimited text (`MOVE:grid:cell\n`, `REMATCH\n`). Room codes = hex-encoded IP addresses
+- **Network protocol**: Newline-delimited text via `GameNetwork`. Room codes = hex-encoded IP addresses. Game-specific move formats:
+  - SXO: `MOVE:grid:cell`
+  - GMK/HEX/REV: `MOVE:row:col`
+  - C4: `MOVE:col`
+  - MNG: `MOVE:pit`
+  - DAB: `MOVE:type:row:col` (type=0 horizontal, 1 vertical)
+  - CHK: `MOVE:fromRow:fromCol:toRow:toCol` (each jump sent separately)
+  - NMM: `PLACE:pos`, `MOVE:from:to`, `REMOVE:pos`
+  - All games: `REMATCH` for rematch
 - **AI is always player 2** (O)
 - **Canvas**: 800×900 pixels, shared across all games
 - **ESC handling**: VSGames.pde intercepts ESC (prevents Processing exit), delegates to active game's `onEscape()`

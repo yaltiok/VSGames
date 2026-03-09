@@ -2,9 +2,11 @@ final int CHK_MENU = 0;
 final int CHK_PLAYING = 1;
 final int CHK_GAMEOVER = 2;
 final int CHK_HOWTO = 3;
+final int CHK_LOBBY = 4;
 
 final int CHK_TWO_PLAYER = 0;
 final int CHK_AI_MODE = 1;
+final int CHK_ONLINE = 2;
 
 class CHKGame extends GameBase {
   int state;
@@ -29,10 +31,19 @@ class CHKGame extends GameBase {
 
   int gameOverTime;
 
+  // Online
+  GameNetwork network;
+  int lobbyState;
+  int playerRole;
+  String roomCode = "";
+  String disconnectMessage = "";
+  int disconnectMessageTime = 0;
+
   CHKGame() {
     particles = new ArrayList<Particle>();
     validDestinations = new ArrayList<int[]>();
     renderer = new CHKRenderer(this);
+    network = new GameNetwork();
   }
 
   String getName() { return "Checkers"; }
@@ -42,6 +53,7 @@ class CHKGame extends GameBase {
     state = CHK_MENU;
     particles.clear();
     aiThinking = false;
+    disconnectMessage = "";
   }
 
   void startPlay(int m) {
@@ -63,18 +75,34 @@ class CHKGame extends GameBase {
     switch (state) {
       case CHK_MENU:
         renderer.drawMenu();
+        if (disconnectMessage.length() > 0 && millis() - disconnectMessageTime < 3000) {
+          textAlign(CENTER, CENTER);
+          textSize(16);
+          fill(231, 76, 60);
+          text(disconnectMessage, CANVAS_W / 2, CANVAS_H - 40);
+        }
         break;
       case CHK_HOWTO:
         renderer.drawHowTo(howToPage);
+        break;
+      case CHK_LOBBY:
+        if (network.connected && !network.isHost) {
+          playerRole = 2;
+          startPlay(CHK_ONLINE);
+          break;
+        }
+        renderer.drawLobby();
         break;
       case CHK_PLAYING:
         if (mode == CHK_AI_MODE && currentPlayer == 2 && !aiThinking) {
           startAIMove();
         }
         if (aiThinking) updateAI();
+        if (mode == CHK_ONLINE) chkReceive();
         renderer.drawGame();
         break;
       case CHK_GAMEOVER:
+        if (mode == CHK_ONLINE) chkReceive();
         renderer.drawGame();
         break;
     }
@@ -176,6 +204,9 @@ class CHKGame extends GameBase {
         if (nav == -1) state = CHK_MENU;
         else howToPage = nav;
         break;
+      case CHK_LOBBY:
+        handleLobbyClick();
+        break;
       case CHK_PLAYING:
         handlePlayClick();
         break;
@@ -185,7 +216,15 @@ class CHKGame extends GameBase {
     }
   }
 
-  void onKeyPressed() {}
+  void onKeyPressed() {
+    if (state == CHK_LOBBY && lobbyState == LOBBY_JOINING) {
+      if (key == ENTER || key == RETURN) {
+        if (roomCode.length() == 8) network.joinGame(roomCode);
+        return;
+      }
+      roomCode = lobbyHandleKey(roomCode);
+    }
+  }
 
   void onEscape() {
     switch (state) {
@@ -195,8 +234,13 @@ class CHKGame extends GameBase {
       case CHK_HOWTO:
         state = CHK_MENU;
         break;
+      case CHK_LOBBY:
+        network.stop();
+        state = CHK_MENU;
+        break;
       case CHK_PLAYING:
       case CHK_GAMEOVER:
+        if (mode == CHK_ONLINE) network.stop();
         state = CHK_MENU;
         particles.clear();
         break;
@@ -206,15 +250,21 @@ class CHKGame extends GameBase {
   void handleMenuClick() {
     float bw = 200, bh = 50;
     if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2) {
-      if (mouseY > 330 - bh/2 && mouseY < 330 + bh/2) startPlay(CHK_TWO_PLAYER);
-      if (mouseY > 400 - bh/2 && mouseY < 400 + bh/2) startPlay(CHK_AI_MODE);
-      if (mouseY > 470 - bh/2 && mouseY < 470 + bh/2) { state = CHK_HOWTO; howToPage = 0; }
-      if (mouseY > 540 - bh/2 && mouseY < 540 + bh/2) returnToLauncher();
+      if (mouseY > 310 - bh/2 && mouseY < 310 + bh/2) startPlay(CHK_TWO_PLAYER);
+      if (mouseY > 375 - bh/2 && mouseY < 375 + bh/2) startPlay(CHK_AI_MODE);
+      if (mouseY > 440 - bh/2 && mouseY < 440 + bh/2) {
+        state = CHK_LOBBY;
+        lobbyState = LOBBY_CHOOSE;
+        roomCode = "";
+      }
+      if (mouseY > 505 - bh/2 && mouseY < 505 + bh/2) { state = CHK_HOWTO; howToPage = 0; }
+      if (mouseY > 570 - bh/2 && mouseY < 570 + bh/2) returnToLauncher();
     }
   }
 
   void handlePlayClick() {
     if (mode == CHK_AI_MODE && currentPlayer == 2) return;
+    if (mode == CHK_ONLINE && currentPlayer != playerRole) return;
 
     int col = (int)((mouseX - CHK_OFFSET_X) / CHK_CELL);
     int row = (int)((mouseY - CHK_OFFSET_Y) / CHK_CELL);
@@ -223,6 +273,7 @@ class CHKGame extends GameBase {
     if (inMultiJump) {
       for (int[] dest : validDestinations) {
         if (dest[0] == row && dest[1] == col) {
+          if (mode == CHK_ONLINE) network.send("MOVE:" + multiJumpRow + ":" + multiJumpCol + ":" + row + ":" + col);
           executeMove(multiJumpRow, multiJumpCol, row, col);
           return;
         }
@@ -234,6 +285,7 @@ class CHKGame extends GameBase {
     if (selectedRow != -1) {
       for (int[] dest : validDestinations) {
         if (dest[0] == row && dest[1] == col) {
+          if (mode == CHK_ONLINE) network.send("MOVE:" + selectedRow + ":" + selectedCol + ":" + row + ":" + col);
           executeMove(selectedRow, selectedCol, row, col);
           return;
         }
@@ -255,10 +307,12 @@ class CHKGame extends GameBase {
     float rx = CANVAS_W/2 - 110;
     float ry = 55;
     if (mouseX > rx - bw/2 && mouseX < rx + bw/2 && mouseY > ry - bh/2 && mouseY < ry + bh/2) {
+      if (mode == CHK_ONLINE) network.send("REMATCH");
       startPlay(mode);
     }
     float mx = CANVAS_W/2 + 110;
     if (mouseX > mx - bw/2 && mouseX < mx + bw/2 && mouseY > ry - bh/2 && mouseY < ry + bh/2) {
+      if (mode == CHK_ONLINE) network.stop();
       state = CHK_MENU;
       particles.clear();
     }
@@ -301,5 +355,70 @@ class CHKGame extends GameBase {
       endTurn();
     }
     aiThinking = false;
+  }
+
+  // Network
+
+  void chkReceive() {
+    if (!network.isPeerConnected()) {
+      network.stop();
+      disconnectMessage = "Opponent disconnected";
+      disconnectMessageTime = millis();
+      state = CHK_MENU;
+      particles.clear();
+      return;
+    }
+    String data = network.receiveNext();
+    while (data != null) {
+      if (data.startsWith("MOVE:")) {
+        String[] parts = data.split(":");
+        if (parts.length == 5) {
+          try {
+            int fr = Integer.parseInt(parts[1]);
+            int fc = Integer.parseInt(parts[2]);
+            int tr = Integer.parseInt(parts[3]);
+            int tc = Integer.parseInt(parts[4]);
+            executeMove(fr, fc, tr, tc);
+          } catch (Exception e) {}
+        }
+      } else if (data.equals("REMATCH")) {
+        startPlay(CHK_ONLINE);
+      }
+      data = network.receiveNext();
+    }
+  }
+
+  void handleLobbyClick() {
+    int action = lobbyHandleClick(lobbyState, roomCode, network.joining);
+    switch (action) {
+      case LOBBY_ACTION_HOST:
+        network.startHosting();
+        lobbyState = LOBBY_HOSTING;
+        break;
+      case LOBBY_ACTION_JOIN_SCREEN:
+        lobbyState = LOBBY_JOINING;
+        roomCode = "";
+        break;
+      case LOBBY_ACTION_CONNECT:
+        network.joinGame(roomCode);
+        break;
+      case LOBBY_ACTION_BACK:
+      case LOBBY_ACTION_CANCEL:
+        network.stop();
+        state = CHK_MENU;
+        break;
+    }
+  }
+
+  void onServerEvent(Server s, Client c) {
+    network.onServerEvent(s, c);
+    playerRole = 1;
+    startPlay(CHK_ONLINE);
+  }
+
+  void onDisconnectEvent(Client c) {
+    network.onDisconnectEvent(c);
+    state = CHK_MENU;
+    particles.clear();
   }
 }

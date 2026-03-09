@@ -218,10 +218,16 @@ class CHKRenderer {
     text("Dama", CANVAS_W / 2, 230);
 
     // Buttons
-    drawButton(CANVAS_W / 2, 330, "2 Players", color(46, 204, 113));
-    drawButton(CANVAS_W / 2, 400, "vs AI", CHK_COLOR_P1);
-    drawButton(CANVAS_W / 2, 470, "How to Play", color(180, 50, 50));
-    drawButton(CANVAS_W / 2, 540, "Back", color(120));
+    drawButton(CANVAS_W / 2, 310, "2 Players", color(46, 204, 113));
+    drawButton(CANVAS_W / 2, 375, "vs AI", CHK_COLOR_P1);
+    drawButton(CANVAS_W / 2, 440, "Online", color(52, 152, 219));
+    drawButton(CANVAS_W / 2, 505, "How to Play", color(180, 50, 50));
+    drawButton(CANVAS_W / 2, 570, "Back", color(120));
+  }
+
+  void drawLobby() {
+    background(CHK_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, color(200, 40, 40));
   }
 
   void drawHowTo(int page) {

@@ -76,6 +76,7 @@ class C4Renderer {
   void drawHoverPreview() {
     if (game.state != C4_PLAYING) return;
     if (game.mode == C4_AI_MODE && game.currentPlayer == 2) return;
+    if (game.mode == C4_ONLINE && game.currentPlayer != game.playerRole) return;
 
     int col = getColumnAtMouse();
     if (col < 0 || col >= C4_COLS) return;
@@ -149,6 +150,14 @@ class C4Renderer {
     if (game.mode == C4_AI_MODE && game.currentPlayer == 2) {
       label = "AI Thinking...";
     }
+    if (game.mode == C4_ONLINE) {
+      if (game.currentPlayer == game.playerRole) {
+        label = "Your Turn (" + (game.playerRole == 1 ? "Red" : "Yellow") + ")";
+      } else {
+        label = "Opponent's Turn";
+      }
+      c = (game.currentPlayer == 1) ? C4_COLOR_P1 : C4_COLOR_P2;
+    }
     if (game.state == C4_DROPPING) {
       label = (game.dropPlayer == 1) ? "Red" : "Yellow";
       c = (game.dropPlayer == 1) ? C4_COLOR_P1 : C4_COLOR_P2;
@@ -171,6 +180,13 @@ class C4Renderer {
     if (game.winner == 3) {
       msg = "Draw!";
       c = color(180);
+    } else if (game.mode == C4_ONLINE) {
+      if (game.winner == game.playerRole) {
+        msg = "You Win!";
+      } else {
+        msg = "You Lose!";
+      }
+      c = (game.winner == 1) ? C4_COLOR_P1 : C4_COLOR_P2;
     } else if (game.winner == 1) {
       msg = "Red Wins!";
       c = C4_COLOR_P1;
@@ -219,10 +235,29 @@ class C4Renderer {
     fill(150);
     text("4'l\u00fc Ba\u011fla", CANVAS_W / 2, 230);
 
-    c4DrawButton(CANVAS_W / 2, 330, "2 Players", color(46, 204, 113));
-    c4DrawButton(CANVAS_W / 2, 400, "vs AI", C4_COLOR_P2);
-    c4DrawButton(CANVAS_W / 2, 470, "How to Play", color(30, 100, 200));
-    c4DrawButton(CANVAS_W / 2, 540, "Back", color(120));
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(16);
+        fill(220, 40, 40, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 275);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
+
+    c4DrawButton(CANVAS_W / 2, 310, "2 Players", color(46, 204, 113));
+    c4DrawButton(CANVAS_W / 2, 375, "vs AI", C4_COLOR_P2);
+    c4DrawButton(CANVAS_W / 2, 440, "Online", color(30, 100, 200));
+    c4DrawButton(CANVAS_W / 2, 505, "How to Play", color(241, 196, 15));
+    c4DrawButton(CANVAS_W / 2, 570, "Back", color(120));
+  }
+
+  void drawLobby() {
+    background(C4_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, color(30, 100, 200));
   }
 
   void drawHowTo(int page) {

@@ -10,10 +10,6 @@ final int SXO_TWO_PLAYER = 0;
 final int SXO_AI_MODE = 1;
 final int SXO_ONLINE = 2;
 
-// SXO Lobby sub-states
-final int SXO_LOBBY_CHOOSE = 0;
-final int SXO_LOBBY_HOSTING = 1;
-final int SXO_LOBBY_JOINING = 2;
 
 // SXO Layout
 final int SXO_TOP_BAR = 100;
@@ -21,8 +17,6 @@ final int SXO_GRID_SIZE = 600;
 final int SXO_BIG_CELL = 200;
 final int SXO_OFFSET_X = (CANVAS_W - SXO_GRID_SIZE) / 2;
 final int SXO_ANIM_DURATION = 300;
-final int SXO_NET_PORT = 12345;
-
 class SXOGame extends GameBase {
   // State
   int state;
@@ -35,7 +29,6 @@ class SXOGame extends GameBase {
   int lobbyState;
   int playerRole;
   String roomCode = "";
-  String hostRoomCode = "";
   String disconnectMessage = "";
   int disconnectMessageTime = 0;
 
@@ -60,12 +53,12 @@ class SXOGame extends GameBase {
 
   // Sub-components
   SXORenderer renderer;
-  SXONetwork network;
+  GameNetwork network;
 
   SXOGame() {
     particles = new ArrayList<Particle>();
     renderer = new SXORenderer(this);
-    network = new SXONetwork(this);
+    network = new GameNetwork();
   }
 
   String getName() { return "Super XOX"; }
@@ -89,6 +82,11 @@ class SXOGame extends GameBase {
         renderer.drawMenu();
         break;
       case SXO_LOBBY:
+        if (network.connected && !network.isHost) {
+          playerRole = 2;
+          startPlay(SXO_ONLINE);
+          break;
+        }
         renderer.drawLobby();
         break;
       case SXO_PLAYING:
@@ -96,11 +94,11 @@ class SXOGame extends GameBase {
           startAIMove();
         }
         if (aiThinking) updateAI();
-        if (mode == SXO_ONLINE) network.receive();
+        if (mode == SXO_ONLINE) sxoReceive();
         renderer.drawGame();
         break;
       case SXO_GAMEOVER:
-        if (mode == SXO_ONLINE) network.receive();
+        if (mode == SXO_ONLINE) sxoReceive();
         renderer.drawGame();
         break;
       case SXO_HOWTO:
@@ -198,7 +196,7 @@ class SXOGame extends GameBase {
   }
 
   void onKeyPressed() {
-    if (state == SXO_LOBBY && lobbyState == SXO_LOBBY_JOINING) {
+    if (state == SXO_LOBBY && lobbyState == LOBBY_JOINING) {
       handleLobbyKeyInput();
     }
   }
@@ -226,28 +224,22 @@ class SXOGame extends GameBase {
 
   void handleMenuClick() {
     float bw = 200, bh = 50;
-    if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-        mouseY > 310 - bh/2 && mouseY < 310 + bh/2) {
+    if (lobbyButtonHit(CANVAS_W/2, 310, bw, bh)) {
       startPlay(SXO_TWO_PLAYER);
     }
-    if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-        mouseY > 375 - bh/2 && mouseY < 375 + bh/2) {
+    if (lobbyButtonHit(CANVAS_W/2, 375, bw, bh)) {
       startPlay(SXO_AI_MODE);
     }
-    if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-        mouseY > 440 - bh/2 && mouseY < 440 + bh/2) {
+    if (lobbyButtonHit(CANVAS_W/2, 440, bw, bh)) {
       state = SXO_LOBBY;
-      lobbyState = SXO_LOBBY_CHOOSE;
+      lobbyState = LOBBY_CHOOSE;
       roomCode = "";
     }
-    if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-        mouseY > 505 - bh/2 && mouseY < 505 + bh/2) {
+    if (lobbyButtonHit(CANVAS_W/2, 505, bw, bh)) {
       state = SXO_HOWTO;
       howToPage = 0;
     }
-    // Back to launcher
-    if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-        mouseY > 570 - bh/2 && mouseY < 570 + bh/2) {
+    if (lobbyButtonHit(CANVAS_W/2, 570, bw, bh)) {
       returnToLauncher();
     }
   }
@@ -275,7 +267,7 @@ class SXOGame extends GameBase {
 
     if (!board.isValidMove(gridIdx, cellIdx)) return;
 
-    if (mode == SXO_ONLINE) network.sendMove(gridIdx, cellIdx);
+    if (mode == SXO_ONLINE) network.send("MOVE:" + gridIdx + ":" + cellIdx);
     executeMove(gridIdx, cellIdx);
   }
 
@@ -286,13 +278,13 @@ class SXOGame extends GameBase {
     float bw = 200, bh = 50;
     float rx = CANVAS_W/2 - 110;
     float ry = SXO_TOP_BAR/2 + 25;
-    if (mouseX > rx - bw/2 && mouseX < rx + bw/2 && mouseY > ry - bh/2 && mouseY < ry + bh/2) {
-      if (mode == SXO_ONLINE) network.sendRematch();
+    if (lobbyButtonHit(rx, ry, bw, bh)) {
+      if (mode == SXO_ONLINE) network.send("REMATCH");
       startPlay(mode);
     }
     float mx = CANVAS_W/2 + 110;
     float my = SXO_TOP_BAR/2 + 25;
-    if (mouseX > mx - bw/2 && mouseX < mx + bw/2 && mouseY > my - bh/2 && mouseY < my + bh/2) {
+    if (lobbyButtonHit(mx, my, bw, bh)) {
       if (mode == SXO_ONLINE) network.stop();
       state = SXO_MENU;
       particles.clear();
@@ -300,56 +292,36 @@ class SXOGame extends GameBase {
   }
 
   void handleLobbyClick() {
-    float bw = 200, bh = 50;
-    switch (lobbyState) {
-      case SXO_LOBBY_CHOOSE:
-        if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-            mouseY > 320 - bh/2 && mouseY < 320 + bh/2) {
-          network.startHosting();
-        }
-        if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-            mouseY > 400 - bh/2 && mouseY < 400 + bh/2) {
-          lobbyState = SXO_LOBBY_JOINING;
-          roomCode = "";
-        }
-        if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-            mouseY > 520 - bh/2 && mouseY < 520 + bh/2) {
-          state = SXO_MENU;
-        }
+    int action = lobbyHandleClick(lobbyState, roomCode, network.joining);
+    switch (action) {
+      case LOBBY_ACTION_HOST:
+        network.startHosting();
+        lobbyState = LOBBY_HOSTING;
         break;
-      case SXO_LOBBY_HOSTING:
-        if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-            mouseY > 520 - bh/2 && mouseY < 520 + bh/2) {
-          network.stop();
-          state = SXO_MENU;
-        }
+      case LOBBY_ACTION_JOIN_SCREEN:
+        lobbyState = LOBBY_JOINING;
+        roomCode = "";
         break;
-      case SXO_LOBBY_JOINING:
-        if (!network.joining && roomCode.length() == 8 &&
-            mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-            mouseY > 430 - bh/2 && mouseY < 430 + bh/2) {
-          network.joinGame(roomCode);
-        }
-        if (mouseX > CANVAS_W/2 - bw/2 && mouseX < CANVAS_W/2 + bw/2 &&
-            mouseY > 520 - bh/2 && mouseY < 520 + bh/2) {
-          network.stop();
-          state = SXO_MENU;
-        }
+      case LOBBY_ACTION_CONNECT:
+        network.joinGame(roomCode);
+        break;
+      case LOBBY_ACTION_BACK:
+        network.stop();
+        state = SXO_MENU;
+        break;
+      case LOBBY_ACTION_CANCEL:
+        network.stop();
+        state = SXO_MENU;
         break;
     }
   }
 
   void handleLobbyKeyInput() {
-    if (key == BACKSPACE && roomCode.length() > 0) {
-      roomCode = roomCode.substring(0, roomCode.length() - 1);
-    } else if (key == ENTER || key == RETURN) {
+    if (key == ENTER || key == RETURN) {
       if (roomCode.length() == 8) network.joinGame(roomCode);
-    } else if (roomCode.length() < 8) {
-      char k = Character.toUpperCase(key);
-      if ((k >= '0' && k <= '9') || (k >= 'A' && k <= 'F')) {
-        roomCode += k;
-      }
+      return;
     }
+    roomCode = lobbyHandleKey(roomCode);
   }
 
   // AI
@@ -399,13 +371,46 @@ class SXOGame extends GameBase {
     }
   }
 
-  // Network callbacks
+  // Network
+
+  void sxoReceive() {
+    if (!network.isPeerConnected()) {
+      network.stop();
+      disconnectMessage = "Opponent disconnected";
+      disconnectMessageTime = millis();
+      state = SXO_MENU;
+      particles.clear();
+      return;
+    }
+    String data = network.receiveNext();
+    while (data != null) {
+      if (data.startsWith("MOVE:")) {
+        String[] parts = data.split(":");
+        if (parts.length == 3) {
+          try {
+            int g = Integer.parseInt(parts[1]);
+            int c = Integer.parseInt(parts[2]);
+            if (board.isValidMove(g, c)) {
+              executeMove(g, c);
+            }
+          } catch (Exception e) {}
+        }
+      } else if (data.equals("REMATCH")) {
+        startPlay(SXO_ONLINE);
+      }
+      data = network.receiveNext();
+    }
+  }
 
   void onServerEvent(Server s, Client c) {
     network.onServerEvent(s, c);
+    playerRole = 1;
+    startPlay(SXO_ONLINE);
   }
 
   void onDisconnectEvent(Client c) {
     network.onDisconnectEvent(c);
+    state = SXO_MENU;
+    particles.clear();
   }
 }

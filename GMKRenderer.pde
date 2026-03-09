@@ -19,6 +19,8 @@ class GMKRenderer {
   void render() {
     if (game.state == GMK_MENU) {
       drawMenu();
+    } else if (game.state == GMK_LOBBY) {
+      drawLobby();
     } else if (game.state == GMK_PLAYING) {
       drawPlaying();
     } else if (game.state == GMK_GAMEOVER) {
@@ -55,10 +57,11 @@ class GMKRenderer {
     text("Five in a Row", CANVAS_W / 2, 230);
 
     float cx = CANVAS_W / 2;
-    gmkDrawButton(cx, 300, 200, 50, "2 Players");
-    gmkDrawButton(cx, 370, 200, 50, "vs AI");
-    gmkDrawButton(cx, 440, 200, 50, "How to Play");
-    gmkDrawButton(cx, 510, 200, 50, "Back");
+    gmkDrawButton(cx, 310, 200, 50, "2 Players");
+    gmkDrawButton(cx, 375, 200, 50, "vs AI");
+    gmkDrawButton(cx, 440, 200, 50, "Online");
+    gmkDrawButton(cx, 505, 200, 50, "How to Play");
+    gmkDrawButton(cx, 570, 200, 50, "Back");
   }
 
   // --- Playing ---
@@ -292,6 +295,13 @@ class GMKRenderer {
       drawHowToText("Horizontal, vertical, or diagonal.", ty + 28);
       drawHowToText("Board full = draw (very rare).", ty + 56);
     }
+  }
+
+  // --- Lobby ---
+
+  void drawLobby() {
+    background(GMK_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, color(80, 55, 30));
   }
 
   // --- Helpers ---

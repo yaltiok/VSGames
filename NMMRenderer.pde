@@ -158,6 +158,7 @@ class NMMRenderer {
     if (game.state != NMM_PLAYING) return;
     if (game.removing) return;
     if (game.mode == NMM_AI_MODE && game.currentPlayer == 2) return;
+    if (game.mode == NMM_ONLINE && game.currentPlayer != game.playerRole) return;
 
     int phase = game.board.getPhase(game.currentPlayer);
 
@@ -224,6 +225,7 @@ class NMMRenderer {
   void drawHover() {
     if (game.state != NMM_PLAYING) return;
     if (game.mode == NMM_AI_MODE && game.currentPlayer == 2) return;
+    if (game.mode == NMM_ONLINE && game.currentPlayer != game.playerRole) return;
 
     int hovered = getClickedPosition();
     if (hovered == -1) return;
@@ -357,10 +359,16 @@ class NMMRenderer {
     fill(180, 160, 130);
     text("Dokuz Tas", CANVAS_W / 2, 230);
 
-    nmmDrawButton(CANVAS_W / 2, 330, "2 Players", NMM_COLOR_HIGHLIGHT);
-    nmmDrawButton(CANVAS_W / 2, 400, "vs AI", color(52, 152, 219));
-    nmmDrawButton(CANVAS_W / 2, 470, "How to Play", color(241, 196, 15));
-    nmmDrawButton(CANVAS_W / 2, 540, "Back", color(120));
+    nmmDrawButton(CANVAS_W / 2, 310, "2 Players", NMM_COLOR_HIGHLIGHT);
+    nmmDrawButton(CANVAS_W / 2, 375, "vs AI", color(52, 152, 219));
+    nmmDrawButton(CANVAS_W / 2, 440, "Online", color(241, 196, 15));
+    nmmDrawButton(CANVAS_W / 2, 505, "How to Play", color(160, 120, 60));
+    nmmDrawButton(CANVAS_W / 2, 570, "Back", color(120));
+  }
+
+  void drawLobby() {
+    background(NMM_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, NMM_COLOR_HIGHLIGHT);
   }
 
   // How to Play

@@ -3,9 +3,11 @@ final int C4_PLAYING = 1;
 final int C4_GAMEOVER = 2;
 final int C4_DROPPING = 3;
 final int C4_HOWTO = 4;
+final int C4_LOBBY = 5;
 
 final int C4_TWO_PLAYER = 0;
 final int C4_AI_MODE = 1;
+final int C4_ONLINE = 2;
 
 final int C4_COLS = 7;
 final int C4_ROWS = 6;
@@ -38,9 +40,18 @@ class C4Game extends GameBase {
   // Game over
   int gameOverTime;
 
+  // Online
+  GameNetwork network;
+  int lobbyState;
+  int playerRole;
+  String roomCode = "";
+  String disconnectMessage = "";
+  int disconnectMessageTime = 0;
+
   C4Game() {
     particles = new ArrayList<Particle>();
     renderer = new C4Renderer(this);
+    network = new GameNetwork();
   }
 
   String getName() { return "Connect Four"; }
@@ -50,6 +61,7 @@ class C4Game extends GameBase {
     state = C4_MENU;
     particles.clear();
     aiThinking = false;
+    disconnectMessage = "";
   }
 
   void startPlay(int m) {
@@ -70,18 +82,29 @@ class C4Game extends GameBase {
       case C4_MENU:
         renderer.drawMenu();
         break;
+      case C4_LOBBY:
+        if (network.connected && !network.isHost) {
+          playerRole = 2;
+          startPlay(C4_ONLINE);
+          break;
+        }
+        renderer.drawLobby();
+        break;
       case C4_PLAYING:
         if (mode == C4_AI_MODE && currentPlayer == 2 && !aiThinking) {
           startAIMove();
         }
         if (aiThinking) updateAI();
+        if (mode == C4_ONLINE) c4Receive();
         renderer.drawGame();
         break;
       case C4_DROPPING:
         updateDropAnimation();
+        if (mode == C4_ONLINE) c4Receive();
         renderer.drawGame();
         break;
       case C4_GAMEOVER:
+        if (mode == C4_ONLINE) c4Receive();
         renderer.drawGame();
         break;
       case C4_HOWTO:
@@ -170,6 +193,9 @@ class C4Game extends GameBase {
       case C4_MENU:
         handleMenuClick();
         break;
+      case C4_LOBBY:
+        handleLobbyClick();
+        break;
       case C4_PLAYING:
         handlePlayClick();
         break;
@@ -186,16 +212,29 @@ class C4Game extends GameBase {
     }
   }
 
-  void onKeyPressed() {}
+  void onKeyPressed() {
+    if (state == C4_LOBBY && lobbyState == LOBBY_JOINING) {
+      if (key == ENTER || key == RETURN) {
+        if (roomCode.length() == 8) network.joinGame(roomCode);
+        return;
+      }
+      roomCode = lobbyHandleKey(roomCode);
+    }
+  }
 
   void onEscape() {
     switch (state) {
       case C4_MENU:
         returnToLauncher();
         break;
+      case C4_LOBBY:
+        network.stop();
+        state = C4_MENU;
+        break;
       case C4_PLAYING:
       case C4_DROPPING:
       case C4_GAMEOVER:
+        if (mode == C4_ONLINE) network.stop();
         state = C4_MENU;
         particles.clear();
         break;
@@ -209,14 +248,18 @@ class C4Game extends GameBase {
     float bw = 200, bh = 50;
     float cx = CANVAS_W / 2;
     if (mouseX > cx - bw/2 && mouseX < cx + bw/2) {
-      if (mouseY > 330 - bh/2 && mouseY < 330 + bh/2) {
+      if (mouseY > 310 - bh/2 && mouseY < 310 + bh/2) {
         startPlay(C4_TWO_PLAYER);
-      } else if (mouseY > 400 - bh/2 && mouseY < 400 + bh/2) {
+      } else if (mouseY > 375 - bh/2 && mouseY < 375 + bh/2) {
         startPlay(C4_AI_MODE);
-      } else if (mouseY > 470 - bh/2 && mouseY < 470 + bh/2) {
+      } else if (mouseY > 440 - bh/2 && mouseY < 440 + bh/2) {
+        state = C4_LOBBY;
+        lobbyState = LOBBY_CHOOSE;
+        roomCode = "";
+      } else if (mouseY > 505 - bh/2 && mouseY < 505 + bh/2) {
         state = C4_HOWTO;
         howToPage = 0;
-      } else if (mouseY > 540 - bh/2 && mouseY < 540 + bh/2) {
+      } else if (mouseY > 570 - bh/2 && mouseY < 570 + bh/2) {
         returnToLauncher();
       }
     }
@@ -224,11 +267,13 @@ class C4Game extends GameBase {
 
   void handlePlayClick() {
     if (mode == C4_AI_MODE && currentPlayer == 2) return;
+    if (mode == C4_ONLINE && currentPlayer != playerRole) return;
 
     int col = renderer.getColumnAtMouse();
     if (col < 0 || col >= C4_COLS) return;
     if (!board.isValidDrop(col)) return;
 
+    if (mode == C4_ONLINE) network.send("MOVE:" + col);
     executeDrop(col);
   }
 
@@ -240,13 +285,79 @@ class C4Game extends GameBase {
     float rx = CANVAS_W / 2 - 110;
     float ry = 60;
     if (mouseX > rx - bw/2 && mouseX < rx + bw/2 && mouseY > ry - bh/2 && mouseY < ry + bh/2) {
+      if (mode == C4_ONLINE) network.send("REMATCH");
       startPlay(mode);
     }
     float mx = CANVAS_W / 2 + 110;
     if (mouseX > mx - bw/2 && mouseX < mx + bw/2 && mouseY > ry - bh/2 && mouseY < ry + bh/2) {
+      if (mode == C4_ONLINE) network.stop();
       state = C4_MENU;
       particles.clear();
     }
+  }
+
+  // Network
+
+  void c4Receive() {
+    if (!network.isPeerConnected()) {
+      network.stop();
+      disconnectMessage = "Opponent disconnected";
+      disconnectMessageTime = millis();
+      state = C4_MENU;
+      particles.clear();
+      return;
+    }
+    String data = network.receiveNext();
+    while (data != null) {
+      if (data.startsWith("MOVE:")) {
+        String[] parts = data.split(":");
+        if (parts.length == 2) {
+          try {
+            int col = Integer.parseInt(parts[1]);
+            if (board.isValidDrop(col)) {
+              executeDrop(col);
+            }
+          } catch (Exception e) {}
+        }
+      } else if (data.equals("REMATCH")) {
+        startPlay(C4_ONLINE);
+      }
+      data = network.receiveNext();
+    }
+  }
+
+  void handleLobbyClick() {
+    int action = lobbyHandleClick(lobbyState, roomCode, network.joining);
+    switch (action) {
+      case LOBBY_ACTION_HOST:
+        network.startHosting();
+        lobbyState = LOBBY_HOSTING;
+        break;
+      case LOBBY_ACTION_JOIN_SCREEN:
+        lobbyState = LOBBY_JOINING;
+        roomCode = "";
+        break;
+      case LOBBY_ACTION_CONNECT:
+        network.joinGame(roomCode);
+        break;
+      case LOBBY_ACTION_BACK:
+      case LOBBY_ACTION_CANCEL:
+        network.stop();
+        state = C4_MENU;
+        break;
+    }
+  }
+
+  void onServerEvent(Server s, Client c) {
+    network.onServerEvent(s, c);
+    playerRole = 1;
+    startPlay(C4_ONLINE);
+  }
+
+  void onDisconnectEvent(Client c) {
+    network.onDisconnectEvent(c);
+    state = C4_MENU;
+    particles.clear();
   }
 
   // Particles

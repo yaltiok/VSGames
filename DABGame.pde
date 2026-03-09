@@ -2,9 +2,11 @@ final int DAB_MENU = 0;
 final int DAB_PLAYING = 1;
 final int DAB_GAMEOVER = 2;
 final int DAB_HOWTO = 3;
+final int DAB_LOBBY = 4;
 
 final int DAB_TWO_PLAYER = 0;
 final int DAB_AI_MODE = 1;
+final int DAB_ONLINE = 2;
 
 final int DAB_GRID_DOTS = 5;
 final int DAB_GRID_BOXES = 4;
@@ -42,9 +44,18 @@ class DABGame extends GameBase {
 
   int gameOverTime;
 
+  // Online
+  GameNetwork network;
+  int lobbyState;
+  int playerRole;
+  String roomCode = "";
+  String disconnectMessage = "";
+  int disconnectMessageTime = 0;
+
   DABGame() {
     particles = new ArrayList<Particle>();
     renderer = new DABRenderer(this);
+    network = new GameNetwork();
   }
 
   String getName() { return "Dots & Boxes"; }
@@ -54,6 +65,7 @@ class DABGame extends GameBase {
     state = DAB_MENU;
     particles.clear();
     aiThinking = false;
+    disconnectMessage = "";
   }
 
   void startPlay(int m) {
@@ -80,10 +92,20 @@ class DABGame extends GameBase {
           startAIMove();
         }
         if (aiThinking) updateAI();
+        if (mode == DAB_ONLINE) dabReceive();
         renderer.drawGame();
         break;
       case DAB_GAMEOVER:
+        if (mode == DAB_ONLINE) dabReceive();
         renderer.drawGame();
+        break;
+      case DAB_LOBBY:
+        if (network.connected && !network.isHost) {
+          playerRole = 2;
+          startPlay(DAB_ONLINE);
+          break;
+        }
+        renderer.drawLobby();
         break;
       case DAB_HOWTO:
         renderer.drawHowTo(howToPage);
@@ -94,6 +116,7 @@ class DABGame extends GameBase {
   void updateHover() {
     if (state != DAB_PLAYING) { hoverType = -1; return; }
     if (mode == DAB_AI_MODE && currentPlayer == 2) { hoverType = -1; return; }
+    if (mode == DAB_ONLINE && currentPlayer != playerRole) { hoverType = -1; return; }
 
     int[] nearest = findNearestLine(mouseX, mouseY);
     if (nearest != null) {
@@ -229,6 +252,9 @@ class DABGame extends GameBase {
       case DAB_GAMEOVER:
         handleGameOverClick();
         break;
+      case DAB_LOBBY:
+        handleLobbyClick();
+        break;
       case DAB_HOWTO:
         int nav = handleHowToNav(howToPage, 2);
         if (nav == -1) state = DAB_MENU;
@@ -237,7 +263,15 @@ class DABGame extends GameBase {
     }
   }
 
-  void onKeyPressed() {}
+  void onKeyPressed() {
+    if (state == DAB_LOBBY && lobbyState == LOBBY_JOINING) {
+      if (key == ENTER || key == RETURN) {
+        if (roomCode.length() == 8) network.joinGame(roomCode);
+        return;
+      }
+      roomCode = lobbyHandleKey(roomCode);
+    }
+  }
 
   void onEscape() {
     switch (state) {
@@ -246,8 +280,13 @@ class DABGame extends GameBase {
         break;
       case DAB_PLAYING:
       case DAB_GAMEOVER:
+        if (mode == DAB_ONLINE) network.stop();
         state = DAB_MENU;
         particles.clear();
+        break;
+      case DAB_LOBBY:
+        network.stop();
+        state = DAB_MENU;
         break;
       case DAB_HOWTO:
         state = DAB_MENU;
@@ -257,27 +296,34 @@ class DABGame extends GameBase {
 
   void handleMenuClick() {
     float bw = 200, bh = 50;
-    if (dabButtonHit(CANVAS_W / 2, 330, bw, bh)) {
+    if (dabButtonHit(CANVAS_W / 2, 310, bw, bh)) {
       startPlay(DAB_TWO_PLAYER);
     }
-    if (dabButtonHit(CANVAS_W / 2, 400, bw, bh)) {
+    if (dabButtonHit(CANVAS_W / 2, 375, bw, bh)) {
       startPlay(DAB_AI_MODE);
     }
-    if (dabButtonHit(CANVAS_W / 2, 470, bw, bh)) {
+    if (dabButtonHit(CANVAS_W / 2, 440, bw, bh)) {
+      state = DAB_LOBBY;
+      lobbyState = LOBBY_CHOOSE;
+      network.stop();
+    }
+    if (dabButtonHit(CANVAS_W / 2, 505, bw, bh)) {
       state = DAB_HOWTO;
       howToPage = 0;
     }
-    if (dabButtonHit(CANVAS_W / 2, 540, bw, bh)) {
+    if (dabButtonHit(CANVAS_W / 2, 570, bw, bh)) {
       returnToLauncher();
     }
   }
 
   void handlePlayClick() {
     if (mode == DAB_AI_MODE && currentPlayer == 2) return;
+    if (mode == DAB_ONLINE && currentPlayer != playerRole) return;
 
     int[] nearest = findNearestLine(mouseX, mouseY);
     if (nearest != null) {
       executeMove(nearest[0], nearest[1], nearest[2]);
+      if (mode == DAB_ONLINE) network.send("MOVE:" + nearest[0] + ":" + nearest[1] + ":" + nearest[2]);
     }
   }
 
@@ -287,9 +333,11 @@ class DABGame extends GameBase {
 
     float bw = 200, bh = 50;
     if (dabButtonHit(CANVAS_W / 2 - 110, 80, bw, bh)) {
+      if (mode == DAB_ONLINE) network.send("REMATCH");
       startPlay(mode);
     }
     if (dabButtonHit(CANVAS_W / 2 + 110, 80, bw, bh)) {
+      if (mode == DAB_ONLINE) network.stop();
       state = DAB_MENU;
       particles.clear();
     }
@@ -310,6 +358,72 @@ class DABGame extends GameBase {
       executeMove(aiMove[0], aiMove[1], aiMove[2]);
     }
     aiThinking = false;
+  }
+
+  // Online
+
+  void dabReceive() {
+    if (!network.isPeerConnected()) {
+      network.stop();
+      disconnectMessage = "Opponent disconnected";
+      disconnectMessageTime = millis();
+      state = DAB_MENU;
+      particles.clear();
+      return;
+    }
+    String data = network.receiveNext();
+    while (data != null) {
+      if (data.startsWith("MOVE:")) {
+        String[] parts = data.split(":");
+        if (parts.length == 4) {
+          try {
+            int type = Integer.parseInt(parts[1]);
+            int row = Integer.parseInt(parts[2]);
+            int col = Integer.parseInt(parts[3]);
+            if (!board.isLineSet(type, row, col)) {
+              executeMove(type, row, col);
+            }
+          } catch (Exception e) {}
+        }
+      } else if (data.equals("REMATCH")) {
+        startPlay(DAB_ONLINE);
+      }
+      data = network.receiveNext();
+    }
+  }
+
+  void handleLobbyClick() {
+    int action = lobbyHandleClick(lobbyState, roomCode, network.joining);
+    switch (action) {
+      case LOBBY_ACTION_HOST:
+        network.startHosting();
+        lobbyState = LOBBY_HOSTING;
+        break;
+      case LOBBY_ACTION_JOIN_SCREEN:
+        lobbyState = LOBBY_JOINING;
+        roomCode = "";
+        break;
+      case LOBBY_ACTION_CONNECT:
+        network.joinGame(roomCode);
+        break;
+      case LOBBY_ACTION_BACK:
+      case LOBBY_ACTION_CANCEL:
+        network.stop();
+        state = DAB_MENU;
+        break;
+    }
+  }
+
+  void onServerEvent(Server s, Client c) {
+    network.onServerEvent(s, c);
+    playerRole = 1;
+    startPlay(DAB_ONLINE);
+  }
+
+  void onDisconnectEvent(Client c) {
+    network.onDisconnectEvent(c);
+    state = DAB_MENU;
+    particles.clear();
   }
 }
 

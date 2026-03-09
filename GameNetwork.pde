@@ -1,14 +1,14 @@
-class SXONetwork {
-  SXOGame game;
+final int NET_PORT = 12345;
+
+class GameNetwork {
   Server server;
   Client client;
   Client remoteClient;
   boolean isHost = false;
   boolean connected = false;
-
-  SXONetwork(SXOGame game) {
-    this.game = game;
-  }
+  boolean joining = false;
+  String joinError = "";
+  String hostRoomCode = "";
 
   String getLocalIP() {
     try {
@@ -50,18 +50,14 @@ class SXONetwork {
 
   void startHosting() {
     try {
-      server = new Server(VSGames.this, SXO_NET_PORT);
+      server = new Server(VSGames.this, NET_PORT);
       String localIP = getLocalIP();
-      game.hostRoomCode = ipToRoomCode(localIP);
-      game.lobbyState = SXO_LOBBY_HOSTING;
+      hostRoomCode = ipToRoomCode(localIP);
       isHost = true;
     } catch (Exception e) {
-      game.hostRoomCode = "ERROR";
+      hostRoomCode = "ERROR";
     }
   }
-
-  boolean joining = false;
-  String joinError = "";
 
   void joinGame(String code) {
     String ip = roomCodeToIP(code);
@@ -69,23 +65,21 @@ class SXONetwork {
     joining = true;
     joinError = "";
     final String targetIP = ip;
+    final GameNetwork self = this;
     new Thread(new Runnable() {
       public void run() {
         try {
-          // Test reachability first (2 second timeout)
           java.net.InetAddress addr = java.net.InetAddress.getByName(targetIP);
           if (!addr.isReachable(2000)) {
             joinError = "Host not reachable";
             joining = false;
             return;
           }
-          Client c = new Client(VSGames.this, targetIP, SXO_NET_PORT);
+          Client c = new Client(VSGames.this, targetIP, NET_PORT);
           if (c.active()) {
             client = c;
             connected = true;
             isHost = false;
-            game.playerRole = 2;
-            game.startPlay(SXO_ONLINE);
           } else {
             joinError = "Connection failed";
           }
@@ -101,8 +95,8 @@ class SXONetwork {
     }).start();
   }
 
-  void sendMove(int gridIdx, int cellIdx) {
-    String msg = "MOVE:" + gridIdx + ":" + cellIdx + "\n";
+  void send(String msg) {
+    if (!msg.endsWith("\n")) msg += "\n";
     if (isHost && remoteClient != null) {
       remoteClient.write(msg);
     } else if (!isHost && client != null) {
@@ -110,50 +104,19 @@ class SXONetwork {
     }
   }
 
-  void sendRematch() {
-    String msg = "REMATCH\n";
-    if (isHost && remoteClient != null) {
-      remoteClient.write(msg);
-    } else if (!isHost && client != null) {
-      client.write(msg);
-    }
-  }
-
-  void receive() {
-    if (!isPeerConnected()) {
-      onPeerDisconnected();
-      return;
-    }
-
+  String receiveNext() {
     Client source = null;
     if (isHost) {
-      source = server.available();
+      source = server != null ? server.available() : null;
     } else {
       if (client != null && client.available() > 0) {
         source = client;
       }
     }
-    if (source == null) return;
-
+    if (source == null) return null;
     String data = source.readStringUntil('\n');
-    while (data != null) {
-      data = data.trim();
-      if (data.startsWith("MOVE:")) {
-        String[] parts = data.split(":");
-        if (parts.length == 3) {
-          try {
-            int g = Integer.parseInt(parts[1]);
-            int c = Integer.parseInt(parts[2]);
-            if (game.board.isValidMove(g, c)) {
-              game.executeMove(g, c);
-            }
-          } catch (Exception e) {}
-        }
-      } else if (data.equals("REMATCH")) {
-        game.startPlay(SXO_ONLINE);
-      }
-      data = source.readStringUntil('\n');
-    }
+    if (data != null) data = data.trim();
+    return data;
   }
 
   boolean isPeerConnected() {
@@ -164,33 +127,24 @@ class SXONetwork {
     }
   }
 
-  void onPeerDisconnected() {
-    stop();
-    game.disconnectMessage = "Opponent disconnected";
-    game.disconnectMessageTime = millis();
-    game.state = SXO_MENU;
-    game.particles.clear();
-  }
-
   void stop() {
     if (server != null) { server.stop(); server = null; }
     if (client != null) { client.stop(); client = null; }
     remoteClient = null;
     connected = false;
     isHost = false;
+    joining = false;
+    joinError = "";
+    hostRoomCode = "";
   }
 
   void onServerEvent(Server s, Client c) {
     remoteClient = c;
     connected = true;
-    game.playerRole = 1;
-    game.startPlay(SXO_ONLINE);
   }
 
   void onDisconnectEvent(Client c) {
     connected = false;
     stop();
-    game.state = SXO_MENU;
-    game.particles.clear();
   }
 }

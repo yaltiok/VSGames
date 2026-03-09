@@ -2,9 +2,11 @@ final int GMK_MENU = 0;
 final int GMK_PLAYING = 1;
 final int GMK_GAMEOVER = 2;
 final int GMK_HOWTO = 3;
+final int GMK_LOBBY = 4;
 
 final int GMK_TWO_PLAYER = 0;
 final int GMK_AI_MODE = 1;
+final int GMK_ONLINE = 2;
 
 final int GMK_BOARD_SIZE = 15;
 
@@ -26,9 +28,18 @@ class GMKGame extends GameBase {
   int aiMoveTime;
   boolean aiThinking;
 
+  // Online
+  GameNetwork network;
+  int lobbyState;
+  int playerRole;
+  String roomCode = "";
+  String disconnectMessage = "";
+  int disconnectMessageTime = 0;
+
   GMKGame() {
     particles = new ArrayList<Particle>();
     renderer = new GMKRenderer(this);
+    network = new GameNetwork();
   }
 
   String getName() { return "Gomoku"; }
@@ -38,6 +49,7 @@ class GMKGame extends GameBase {
     state = GMK_MENU;
     particles.clear();
     aiThinking = false;
+    disconnectMessage = "";
   }
 
   void startGame(int gameMode) {
@@ -57,9 +69,20 @@ class GMKGame extends GameBase {
   void render() {
     updateParticles(particles);
 
-    if (state == GMK_PLAYING && aiThinking && aiMove != null && millis() - aiMoveTime > 500) {
-      executeAIMove();
+    if (state == GMK_LOBBY) {
+      if (network.connected && !network.isHost) {
+        playerRole = 2;
+        startGame(GMK_ONLINE);
+      }
     }
+
+    if (state == GMK_PLAYING) {
+      if (aiThinking && aiMove != null && millis() - aiMoveTime > 500) {
+        executeAIMove();
+      }
+      if (mode == GMK_ONLINE) gmkReceive();
+    }
+    if (state == GMK_GAMEOVER && mode == GMK_ONLINE) gmkReceive();
 
     renderer.render();
     drawParticles(particles);
@@ -68,6 +91,8 @@ class GMKGame extends GameBase {
   void onMousePressed() {
     if (state == GMK_MENU) {
       handleMenuClick();
+    } else if (state == GMK_LOBBY) {
+      handleLobbyClick();
     } else if (state == GMK_PLAYING) {
       handlePlayClick();
     } else if (state == GMK_GAMEOVER) {
@@ -79,14 +104,26 @@ class GMKGame extends GameBase {
     }
   }
 
-  void onKeyPressed() {}
+  void onKeyPressed() {
+    if (state == GMK_LOBBY && lobbyState == LOBBY_JOINING) {
+      if (key == ENTER || key == RETURN) {
+        if (roomCode.length() == 8) network.joinGame(roomCode);
+        return;
+      }
+      roomCode = lobbyHandleKey(roomCode);
+    }
+  }
 
   void onEscape() {
     if (state == GMK_MENU) {
       returnToLauncher();
     } else if (state == GMK_HOWTO) {
       state = GMK_MENU;
+    } else if (state == GMK_LOBBY) {
+      network.stop();
+      state = GMK_MENU;
     } else if (state == GMK_PLAYING || state == GMK_GAMEOVER) {
+      if (mode == GMK_ONLINE) network.stop();
       state = GMK_MENU;
       particles.clear();
     }
@@ -96,20 +133,25 @@ class GMKGame extends GameBase {
     float cx = CANVAS_W / 2;
     float btnW = 200, btnH = 50;
 
-    if (gmkButtonHit(cx, 300, btnW, btnH)) {
+    if (lobbyButtonHit(cx, 310, btnW, btnH)) {
       startGame(GMK_TWO_PLAYER);
-    } else if (gmkButtonHit(cx, 370, btnW, btnH)) {
+    } else if (lobbyButtonHit(cx, 375, btnW, btnH)) {
       startGame(GMK_AI_MODE);
-    } else if (gmkButtonHit(cx, 440, btnW, btnH)) {
+    } else if (lobbyButtonHit(cx, 440, btnW, btnH)) {
+      state = GMK_LOBBY;
+      lobbyState = LOBBY_CHOOSE;
+      roomCode = "";
+    } else if (lobbyButtonHit(cx, 505, btnW, btnH)) {
       state = GMK_HOWTO;
       howToPage = 0;
-    } else if (gmkButtonHit(cx, 510, btnW, btnH)) {
+    } else if (lobbyButtonHit(cx, 570, btnW, btnH)) {
       returnToLauncher();
     }
   }
 
   void handlePlayClick() {
     if (aiThinking) return;
+    if (mode == GMK_ONLINE && currentPlayer != playerRole) return;
 
     int[] pos = renderer.getGridPos(mouseX, mouseY);
     if (pos == null) return;
@@ -120,6 +162,8 @@ class GMKGame extends GameBase {
     if (!board.placeStone(row, col, currentPlayer)) return;
     lastRow = row;
     lastCol = col;
+
+    if (mode == GMK_ONLINE) network.send("MOVE:" + row + ":" + col);
 
     int w = board.checkWin(row, col);
     if (w != 0) {
@@ -187,11 +231,92 @@ class GMKGame extends GameBase {
     float cx = CANVAS_W / 2;
     float btnW = 200, btnH = 50;
     if (gmkButtonHit(cx, 400, btnW, btnH)) {
+      if (mode == GMK_ONLINE) network.send("REMATCH");
       startGame(mode);
     } else if (gmkButtonHit(cx, 470, btnW, btnH)) {
+      if (mode == GMK_ONLINE) network.stop();
       state = GMK_MENU;
       particles.clear();
     }
+  }
+
+  // Network
+
+  void gmkReceive() {
+    if (!network.isPeerConnected()) {
+      network.stop();
+      disconnectMessage = "Opponent disconnected";
+      disconnectMessageTime = millis();
+      state = GMK_MENU;
+      particles.clear();
+      return;
+    }
+    String data = network.receiveNext();
+    while (data != null) {
+      if (data.startsWith("MOVE:")) {
+        String[] parts = data.split(":");
+        if (parts.length == 3) {
+          try {
+            int r = Integer.parseInt(parts[1]);
+            int c = Integer.parseInt(parts[2]);
+            if (board.grid[r][c] == 0) {
+              board.placeStone(r, c, currentPlayer);
+              lastRow = r;
+              lastCol = c;
+              int w = board.checkWin(r, c);
+              if (w != 0) {
+                winner = w;
+                winLine = board.getWinLine(r, c);
+                state = GMK_GAMEOVER;
+                spawnWinParticles();
+              } else if (board.isFull()) {
+                winner = 0;
+                state = GMK_GAMEOVER;
+              } else {
+                currentPlayer = (currentPlayer == 1) ? 2 : 1;
+              }
+            }
+          } catch (Exception e) {}
+        }
+      } else if (data.equals("REMATCH")) {
+        startGame(GMK_ONLINE);
+      }
+      data = network.receiveNext();
+    }
+  }
+
+  void handleLobbyClick() {
+    int action = lobbyHandleClick(lobbyState, roomCode, network.joining);
+    switch (action) {
+      case LOBBY_ACTION_HOST:
+        network.startHosting();
+        lobbyState = LOBBY_HOSTING;
+        break;
+      case LOBBY_ACTION_JOIN_SCREEN:
+        lobbyState = LOBBY_JOINING;
+        roomCode = "";
+        break;
+      case LOBBY_ACTION_CONNECT:
+        network.joinGame(roomCode);
+        break;
+      case LOBBY_ACTION_BACK:
+      case LOBBY_ACTION_CANCEL:
+        network.stop();
+        state = GMK_MENU;
+        break;
+    }
+  }
+
+  void onServerEvent(Server s, Client c) {
+    network.onServerEvent(s, c);
+    playerRole = 1;
+    startGame(GMK_ONLINE);
+  }
+
+  void onDisconnectEvent(Client c) {
+    network.onDisconnectEvent(c);
+    state = GMK_MENU;
+    particles.clear();
   }
 }
 

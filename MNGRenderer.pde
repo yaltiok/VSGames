@@ -85,6 +85,13 @@ class MNGRenderer {
     if (game.mode == MNG_AI_MODE && game.board.currentPlayer == 2) {
       label = "AI Thinking...";
     }
+    if (game.mode == MNG_ONLINE) {
+      if (game.board.currentPlayer == game.playerRole) {
+        label = "Your Turn";
+      } else {
+        label = "Opponent's Turn";
+      }
+    }
 
     textSize(22);
     fill(c);
@@ -217,10 +224,16 @@ class MNGRenderer {
     }
   }
 
+  void drawLobby() {
+    background(MNG_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, MNG_COLOR_SELECT);
+  }
+
   void drawHover() {
     if (game.state != MNG_PLAYING) return;
     if (game.animating) return;
     if (game.mode == MNG_AI_MODE && game.board.currentPlayer == 2) return;
+    if (game.mode == MNG_ONLINE && game.board.currentPlayer != game.playerRole) return;
 
     int hovered = getPitAtMouse();
     if (hovered == -1) return;
@@ -305,10 +318,24 @@ class MNGRenderer {
     fill(200, 180, 150);
     text("Turkish Mancala", CANVAS_W / 2, 230);
 
-    drawButton(CANVAS_W / 2, 330, "2 Players", MNG_COLOR_SELECT);
-    drawButton(CANVAS_W / 2, 400, "vs AI", MNG_COLOR_P2);
-    drawButton(CANVAS_W / 2, 470, "How to Play", color(241, 196, 15));
-    drawButton(CANVAS_W / 2, 540, "Back", color(120));
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(16);
+        fill(MNG_COLOR_P1, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 270);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
+
+    drawButton(CANVAS_W / 2, 310, "2 Players", MNG_COLOR_SELECT);
+    drawButton(CANVAS_W / 2, 375, "vs AI", MNG_COLOR_P2);
+    drawButton(CANVAS_W / 2, 440, "Online", MNG_COLOR_P1);
+    drawButton(CANVAS_W / 2, 505, "How to Play", color(241, 196, 15));
+    drawButton(CANVAS_W / 2, 570, "Back", color(120));
   }
 
   // How to Play

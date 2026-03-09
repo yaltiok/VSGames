@@ -14,4 +14,7 @@ abstract class GameBase {
     activeGame = null;
     appState = APP_LAUNCHER;
   }
+
+  void onServerEvent(Server s, Client c) {}
+  void onDisconnectEvent(Client c) {}
 }

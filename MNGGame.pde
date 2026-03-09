@@ -3,9 +3,11 @@ final int MNG_PLAYING = 1;
 final int MNG_GAMEOVER = 2;
 final int MNG_ANIMATING = 3;
 final int MNG_HOWTO = 4;
+final int MNG_LOBBY = 5;
 
 final int MNG_TWO_PLAYER = 0;
 final int MNG_AI_MODE = 1;
+final int MNG_ONLINE = 2;
 
 class MNGGame extends GameBase {
   int state;
@@ -41,9 +43,18 @@ class MNGGame extends GameBase {
   // Renderer
   MNGRenderer renderer;
 
+  // Online
+  GameNetwork network;
+  int lobbyState;
+  int playerRole;
+  String roomCode = "";
+  String disconnectMessage = "";
+  int disconnectMessageTime = 0;
+
   MNGGame() {
     particles = new ArrayList<Particle>();
     renderer = new MNGRenderer(this);
+    network = new GameNetwork();
   }
 
   String getName() { return "Mangala"; }
@@ -56,6 +67,7 @@ class MNGGame extends GameBase {
     extraTurn = false;
     extraTurnMsg = "";
     animating = false;
+    disconnectMessage = "";
   }
 
   void startPlay(int m) {
@@ -84,6 +96,7 @@ class MNGGame extends GameBase {
         }
         if (aiThinking) updateAI();
         if (animating) updateAnimation();
+        if (mode == MNG_ONLINE && !animating) mngReceive();
         renderer.drawGame();
         break;
       case MNG_ANIMATING:
@@ -91,7 +104,16 @@ class MNGGame extends GameBase {
         renderer.drawGame();
         break;
       case MNG_GAMEOVER:
+        if (mode == MNG_ONLINE) mngReceive();
         renderer.drawGame();
+        break;
+      case MNG_LOBBY:
+        if (network.connected && !network.isHost) {
+          playerRole = 2;
+          startPlay(MNG_ONLINE);
+          break;
+        }
+        renderer.drawLobby();
         break;
       case MNG_HOWTO:
         renderer.drawHowTo(howToPage);
@@ -134,6 +156,9 @@ class MNGGame extends GameBase {
       case MNG_GAMEOVER:
         handleGameOverClick();
         break;
+      case MNG_LOBBY:
+        handleLobbyClick();
+        break;
       case MNG_HOWTO:
         int nav = handleHowToNav(howToPage, 3);
         if (nav == -1) state = MNG_MENU;
@@ -142,7 +167,15 @@ class MNGGame extends GameBase {
     }
   }
 
-  void onKeyPressed() {}
+  void onKeyPressed() {
+    if (state == MNG_LOBBY && lobbyState == LOBBY_JOINING) {
+      if (key == ENTER || key == RETURN) {
+        if (roomCode.length() == 8) network.joinGame(roomCode);
+        return;
+      }
+      roomCode = lobbyHandleKey(roomCode);
+    }
+  }
 
   void onEscape() {
     switch (state) {
@@ -152,8 +185,13 @@ class MNGGame extends GameBase {
       case MNG_PLAYING:
       case MNG_ANIMATING:
       case MNG_GAMEOVER:
+        if (mode == MNG_ONLINE) network.stop();
         state = MNG_MENU;
         particles.clear();
+        break;
+      case MNG_LOBBY:
+        network.stop();
+        state = MNG_MENU;
         break;
       case MNG_HOWTO:
         state = MNG_MENU;
@@ -163,17 +201,22 @@ class MNGGame extends GameBase {
 
   void handleMenuClick() {
     float bw = 200, bh = 50;
-    if (mngButtonHit(CANVAS_W / 2, 330, bw, bh)) {
+    if (mngButtonHit(CANVAS_W / 2, 310, bw, bh)) {
       startPlay(MNG_TWO_PLAYER);
     }
-    if (mngButtonHit(CANVAS_W / 2, 400, bw, bh)) {
+    if (mngButtonHit(CANVAS_W / 2, 375, bw, bh)) {
       startPlay(MNG_AI_MODE);
     }
-    if (mngButtonHit(CANVAS_W / 2, 470, bw, bh)) {
+    if (mngButtonHit(CANVAS_W / 2, 440, bw, bh)) {
+      state = MNG_LOBBY;
+      lobbyState = LOBBY_CHOOSE;
+      network.stop();
+    }
+    if (mngButtonHit(CANVAS_W / 2, 505, bw, bh)) {
       state = MNG_HOWTO;
       howToPage = 0;
     }
-    if (mngButtonHit(CANVAS_W / 2, 540, bw, bh)) {
+    if (mngButtonHit(CANVAS_W / 2, 570, bw, bh)) {
       returnToLauncher();
     }
   }
@@ -181,12 +224,14 @@ class MNGGame extends GameBase {
   void handlePlayClick() {
     if (animating) return;
     if (mode == MNG_AI_MODE && board.currentPlayer == 2) return;
+    if (mode == MNG_ONLINE && board.currentPlayer != playerRole) return;
 
     int clicked = renderer.getPitAtMouse();
     if (clicked == -1) return;
     if (!board.isValidMove(clicked, board.currentPlayer)) return;
 
     executeMove(clicked);
+    if (mode == MNG_ONLINE) network.send("MOVE:" + clicked);
   }
 
   void handleGameOverClick() {
@@ -195,9 +240,11 @@ class MNGGame extends GameBase {
 
     float bw = 200, bh = 50;
     if (mngButtonHit(CANVAS_W / 2 - 110, 660, bw, bh)) {
+      if (mode == MNG_ONLINE) network.send("REMATCH");
       startPlay(mode);
     }
     if (mngButtonHit(CANVAS_W / 2 + 110, 660, bw, bh)) {
+      if (mode == MNG_ONLINE) network.stop();
       state = MNG_MENU;
       particles.clear();
     }
@@ -229,6 +276,72 @@ class MNGGame extends GameBase {
 
   void updateAnimation() {
     animating = false;
+  }
+
+  // Particles
+
+  // Online
+
+  void mngReceive() {
+    if (!network.isPeerConnected()) {
+      network.stop();
+      disconnectMessage = "Opponent disconnected";
+      disconnectMessageTime = millis();
+      state = MNG_MENU;
+      particles.clear();
+      return;
+    }
+    String data = network.receiveNext();
+    while (data != null) {
+      if (data.startsWith("MOVE:")) {
+        String[] parts = data.split(":");
+        if (parts.length == 2) {
+          try {
+            int pit = Integer.parseInt(parts[1]);
+            if (board.isValidMove(pit, board.currentPlayer)) {
+              executeMove(pit);
+            }
+          } catch (Exception e) {}
+        }
+      } else if (data.equals("REMATCH")) {
+        startPlay(MNG_ONLINE);
+      }
+      data = network.receiveNext();
+    }
+  }
+
+  void handleLobbyClick() {
+    int action = lobbyHandleClick(lobbyState, roomCode, network.joining);
+    switch (action) {
+      case LOBBY_ACTION_HOST:
+        network.startHosting();
+        lobbyState = LOBBY_HOSTING;
+        break;
+      case LOBBY_ACTION_JOIN_SCREEN:
+        lobbyState = LOBBY_JOINING;
+        roomCode = "";
+        break;
+      case LOBBY_ACTION_CONNECT:
+        network.joinGame(roomCode);
+        break;
+      case LOBBY_ACTION_BACK:
+      case LOBBY_ACTION_CANCEL:
+        network.stop();
+        state = MNG_MENU;
+        break;
+    }
+  }
+
+  void onServerEvent(Server s, Client c) {
+    network.onServerEvent(s, c);
+    playerRole = 1;
+    startPlay(MNG_ONLINE);
+  }
+
+  void onDisconnectEvent(Client c) {
+    network.onDisconnectEvent(c);
+    state = MNG_MENU;
+    particles.clear();
   }
 
   // Particles

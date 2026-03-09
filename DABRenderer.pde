@@ -69,6 +69,13 @@ class DABRenderer {
       }
       turnColor = DAB_COLOR_P2;
     }
+    if (game.mode == DAB_ONLINE) {
+      if (game.currentPlayer == game.playerRole) {
+        turnLabel = "Your Turn";
+      } else {
+        turnLabel = "Opponent's Turn";
+      }
+    }
     fill(turnColor);
     text(turnLabel, CANVAS_W / 2, 80);
   }
@@ -225,6 +232,11 @@ class DABRenderer {
     }
   }
 
+  void drawLobby() {
+    background(DAB_COLOR_BG);
+    drawLobbyUI(game.lobbyState, game.network, game.roomCode, DAB_COLOR_LAST);
+  }
+
   // Menu
 
   void drawMenu() {
@@ -256,10 +268,24 @@ class DABRenderer {
     fill(150);
     text("Nokta Cizgi", CANVAS_W / 2, 250);
 
-    dabDrawButton(CANVAS_W / 2, 330, "2 Players", DAB_COLOR_LAST);
-    dabDrawButton(CANVAS_W / 2, 400, "vs AI", DAB_COLOR_P2);
-    dabDrawButton(CANVAS_W / 2, 470, "How to Play", color(30, 60, 120));
-    dabDrawButton(CANVAS_W / 2, 540, "Back", color(120));
+    // Disconnect message
+    if (game.disconnectMessage.length() > 0) {
+      float elapsed = (millis() - game.disconnectMessageTime) / 1000.0;
+      if (elapsed < 3.0) {
+        float alpha = elapsed < 2.0 ? 255 : map(elapsed, 2.0, 3.0, 255, 0);
+        textSize(16);
+        fill(DAB_COLOR_P1, alpha);
+        text(game.disconnectMessage, CANVAS_W / 2, 280);
+      } else {
+        game.disconnectMessage = "";
+      }
+    }
+
+    dabDrawButton(CANVAS_W / 2, 310, "2 Players", DAB_COLOR_LAST);
+    dabDrawButton(CANVAS_W / 2, 375, "vs AI", DAB_COLOR_P2);
+    dabDrawButton(CANVAS_W / 2, 440, "Online", DAB_COLOR_P1);
+    dabDrawButton(CANVAS_W / 2, 505, "How to Play", color(30, 60, 120));
+    dabDrawButton(CANVAS_W / 2, 570, "Back", color(120));
   }
 
   void drawHowTo(int page) {
